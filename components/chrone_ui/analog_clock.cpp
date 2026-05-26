@@ -212,34 +212,40 @@ void AnalogClockView::draw_center_cap(lv_color_t color)
 
 void AnalogClockView::create_hour_numerals(lv_obj_t *screen)
 {
-    const int r_tick_in = radius_ - kTickInnerInset;
-    const float r_outer = static_cast<float>(r_tick_in - kNumeralRadialGap);
+    if (!screen || !s_canvas) {
+        return;
+    }
 
-    const int canvas_x = (CHRONE_LCD_W - CHRONE_ANALOG_CANVAS_SZ) / 2;
-    const int canvas_y = CHRONE_HEADER_H - 4;
+    /* 方案 A：与长刻度同角 θ=h×30°，数字中心落在固定半径 R_num，再按实测 bbox 居中 */
+    const int r_tick_in = radius_ - kTickInnerInset;
+    const float r_num = static_cast<float>(r_tick_in - kNumeralRadialGap - 8);
+
+    lv_obj_update_layout(s_canvas);
+    const int canvas_sx = lv_obj_get_x(s_canvas);
+    const int canvas_sy = lv_obj_get_y(s_canvas);
 
     for (int h = 1; h <= 12; ++h) {
-        const float ang = static_cast<float>((h % 12) * 30);
+        const float ang_deg = static_cast<float>((h % 12) * 30);
+        const float rad = ang_deg * (3.14159265f / 180.f);
+        const float cx_num = static_cast<float>(cx_) + std::sin(rad) * r_num;
+        const float cy_num = static_cast<float>(cy_) - std::cos(rad) * r_num;
+
         char buf[4];
         std::snprintf(buf, sizeof(buf), "%d", h);
-
-        const float rad = ang * (3.14159265f / 180.f);
-        const float ux = std::sin(rad);
-        const float uy = -std::cos(rad);
-        const float ax = 4.f;
-        const float ay = 6.f;
-        const float extent = std::fabs(ux) * ax + std::fabs(uy) * ay;
-        const float r_c = r_outer - extent;
-
-        const int tx = cx_ + static_cast<int>(std::sin(rad) * r_c);
-        const int ty = cy_ - static_cast<int>(std::cos(rad) * r_c);
 
         lv_obj_t *lb = lv_label_create(screen);
         lv_label_set_text(lb, buf);
         lv_obj_set_style_text_color(lb, lv_color_hex(0xE8ECF5), 0);
         lv_obj_set_style_text_font(lb, &lv_font_montserrat_14, 0);
         lv_obj_set_style_bg_opa(lb, LV_OPA_TRANSP, 0);
-        lv_obj_set_pos(lb, canvas_x + tx - 8, canvas_y + ty - 8);
+        lv_obj_set_style_pad_all(lb, 0, 0);
+        lv_obj_update_layout(lb);
+
+        const int32_t tw = lv_obj_get_width(lb);
+        const int32_t th = lv_obj_get_height(lb);
+        const int32_t left = canvas_sx + static_cast<int32_t>(cx_num + 0.5f) - tw / 2;
+        const int32_t top = canvas_sy + static_cast<int32_t>(cy_num + 0.5f) - th / 2;
+        lv_obj_set_pos(lb, left, top);
         s_numeral_labels[h - 1] = lb;
     }
 }

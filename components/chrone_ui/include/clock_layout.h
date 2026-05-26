@@ -6,8 +6,9 @@
 #define CHRONE_LCD_H           240
 
 #define CHRONE_HEADER_FONT_SIZE  22
-#define CHRONE_HEADER_H            32
-#define CHRONE_FOOTER_H            20
+#define CHRONE_HEADER_H            36
+#define CHRONE_FOOTER_H            32
+#define CHRONE_WEATHER_ICON_SZ     24
 
 /* DSEG7 bitmap font (see components/chrone_ui/fonts/) */
 #define CHRONE_TIME_FONT_SIZE    56

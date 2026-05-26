@@ -1,0 +1,22 @@
+menu "ChroneCore Weather (Seniverse)"
+
+config CHRONECORE_WEATHER_CONFIG
+    bool "Enable weather city list in WiFi provisioning page"
+    default y
+    help
+        Enables /advanced/config city dropdown in the captive portal.
+
+config CHRONECORE_WEATHER_API_KEY
+    string "Seniverse API key"
+    default ""
+    help
+        心知天气 API Key。留空则仅显示占位，不发起 HTTPS 请求。
+
+config CHRONECORE_WEATHER_DEFAULT_CITY
+    string "Default weather location id (pinyin)"
+    default "beijing"
+    depends on CHRONECORE_WEATHER_CONFIG
+    help
+        心知 location，如 beijing、kunming。须在城市白名单内。
+
+endmenu

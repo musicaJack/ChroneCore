@@ -6,6 +6,7 @@
 |------|------|
 | [requirements.md](requirements.md) | 产品需求、功能范围、非功能需求 |
 | [api-reference.md](api-reference.md) | 硬件 BSP、业务模块、外部 API（心知天气）、参考仓库 API 对照 |
+| [clock-weather-layout.md](clock-weather-layout.md) | 时钟屏顶/底栏布局（英文 + 图标，方案 A） |
 | [clock-ui-reference.md](clock-ui-reference.md) | **数字/模拟时钟 UI**：NanoTimer、DS3231_Clock 样式与移植规格 |
 | [architecture.md](architecture.md) | 系统架构、模块划分、数据流、状态机、存储 |
 | [development-plan.md](development-plan.md) | 分阶段开发计划、里程碑、风险与验收 |

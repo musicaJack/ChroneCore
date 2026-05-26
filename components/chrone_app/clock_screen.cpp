@@ -2,11 +2,21 @@
 
 #include "chrone_display.hpp"
 #include "chrone_ui.h"
+#include "chrone_wifi.h"
 
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "lvgl.h"
 
 static const char *TAG = "chrone_app";
+
+static void wifi_background_task(void *arg)
+{
+    (void)arg;
+    ESP_LOGI(TAG, "WiFi background task start");
+    chrone_wifi_start();
+}
 
 static void create_clock_ui(void)
 {
@@ -21,11 +31,18 @@ static void create_clock_ui(void)
         return;
     }
     chrone_ui_refresh();
+    chrone_ui_poll_services();
 }
 
 extern "C" esp_err_t chrone_app_start(void)
 {
     create_clock_ui();
-    ESP_LOGI(TAG, "clock UI started (LVGL 1 Hz partial refresh)");
+
+    if (xTaskCreate(wifi_background_task, "chrone_wifi", 8192, nullptr, 3, nullptr) != pdPASS) {
+        ESP_LOGE(TAG, "wifi task create failed");
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "clock UI + WiFi task started");
     return ESP_OK;
 }
