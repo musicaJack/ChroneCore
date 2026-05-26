@@ -43,6 +43,10 @@
 build/
 Build/
 build-*/
+managed_components/
+sdkconfig
+sdkconfig.old
+dependencies.lock
 
 # CMake generated files
 CMakeFiles/
@@ -67,3 +71,7 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# DSEG font download artifacts (source TTF + generated .c are committed)
+components/chrone_ui/fonts/fonts-DSEG_v046.zip
+components/chrone_ui/fonts/dseg_zip/
