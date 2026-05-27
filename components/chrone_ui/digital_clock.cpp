@@ -51,7 +51,8 @@ static lv_obj_t *s_lb_ss;
 static lv_timer_t *s_tick_timer;
 static lv_obj_t *s_ring_label;
 static lv_timer_t *s_alarm_icon_blink_timer;
-static bool s_alarm_icon_blink_on;
+/** true=响铃橙红，false=琥珀色 */
+static bool s_alarm_icon_blink_ring_tone;
 
 #define ALARM_ICON_BLINK_MS    380
 #define RING_TAP_HINT_Y_OFFSET 50
@@ -650,34 +651,24 @@ static void alarm_icon_invalidate_local(void)
     }
 }
 
-/** 局部清除：24×24 缓冲区填表盘底色，仅刷新图标区域 */
-static void alarm_icon_clear_local(void)
+/** 局部重绘：按指定前景色光栅化闹钟图标并刷新 24×24 区域 */
+static void alarm_icon_redraw_local_fg(lv_color_t fg)
 {
     if (!s_alarm_icon_img) {
         return;
     }
-    const uint16_t bg = ui_color_to_rgb565(ui_color_bg());
-    const size_t n = CHRONE_ALARM_ICON_SZ * CHRONE_ALARM_ICON_SZ;
-    for (size_t i = 0; i < n; ++i) {
-        s_alarm_icon_buf[i] = bg;
-    }
+    const uint16_t fg565 = ui_color_to_rgb565(fg);
+    const uint16_t bg565 = ui_color_to_rgb565(ui_color_bg());
+    chrone_alarm_icon_render_rgb565(s_alarm_icon_buf, fg565, bg565);
     lv_image_set_src(s_alarm_icon_img, &s_alarm_icon_dsc);
     lv_obj_remove_flag(s_alarm_icon_img, LV_OBJ_FLAG_HIDDEN);
     alarm_icon_invalidate_local();
 }
 
-/** 局部重绘：重新光栅化闹钟图标并只刷新该区域 */
-static void alarm_icon_redraw_local(void)
+static void alarm_icon_blink_apply_phase(bool ring_tone)
 {
-    if (!s_alarm_icon_img) {
-        return;
-    }
-    const uint16_t fg = ui_color_to_rgb565(ui_color_alarm_icon_ring());
-    const uint16_t bg = ui_color_to_rgb565(ui_color_bg());
-    chrone_alarm_icon_render_rgb565(s_alarm_icon_buf, fg, bg);
-    lv_image_set_src(s_alarm_icon_img, &s_alarm_icon_dsc);
-    lv_obj_remove_flag(s_alarm_icon_img, LV_OBJ_FLAG_HIDDEN);
-    alarm_icon_invalidate_local();
+    const lv_color_t fg = ring_tone ? ui_color_alarm_icon_ring() : ui_color_alarm_icon();
+    alarm_icon_redraw_local_fg(fg);
 }
 
 static void alarm_icon_blink_timer_cb(lv_timer_t *timer)
@@ -686,19 +677,15 @@ static void alarm_icon_blink_timer_cb(lv_timer_t *timer)
     if (!s_alarm_icon_img || chrone_alarm_get_state() != CHRONE_ALARM_STATE_RINGING) {
         return;
     }
-    s_alarm_icon_blink_on = !s_alarm_icon_blink_on;
-    if (s_alarm_icon_blink_on) {
-        alarm_icon_redraw_local();
-    } else {
-        alarm_icon_clear_local();
-    }
+    s_alarm_icon_blink_ring_tone = !s_alarm_icon_blink_ring_tone;
+    alarm_icon_blink_apply_phase(s_alarm_icon_blink_ring_tone);
 }
 
 static void start_alarm_icon_blink(void)
 {
     stop_alarm_icon_blink_timer();
-    s_alarm_icon_blink_on = true;
-    alarm_icon_redraw_local();
+    s_alarm_icon_blink_ring_tone = true;
+    alarm_icon_blink_apply_phase(true);
     s_alarm_icon_blink_timer = lv_timer_create(alarm_icon_blink_timer_cb, ALARM_ICON_BLINK_MS, nullptr);
     if (s_alarm_icon_blink_timer) {
         lv_timer_set_repeat_count(s_alarm_icon_blink_timer, -1);
