@@ -29,9 +29,10 @@ static lv_obj_t *s_tap_layer;
 static lv_obj_t *s_label_date;
 static lv_obj_t *s_label_week;
 static lv_obj_t *s_alarm_icon_img;
-static uint16_t s_alarm_icon_buf[CHRONE_ALARM_ICON_SZ * CHRONE_ALARM_ICON_SZ];
+static uint16_t s_alarm_icon_buf[CHRONE_ALARM_ICON_CANVAS_W * CHRONE_ALARM_ICON_CANVAS_H];
 static lv_image_dsc_t s_alarm_icon_dsc;
 static bool s_prev_alarm_indicator;
+static int s_prev_alarm_badge_count = -1;
 static lv_obj_t *s_footer_row;
 static lv_obj_t *s_weather_icon_img;
 static lv_obj_t *s_label_weather_text;
@@ -227,6 +228,15 @@ static uint16_t ui_color_to_rgb565(lv_color_t c)
     return lv_color_to_u16(c);
 }
 
+static void alarm_icon_draw_idle(void)
+{
+    const uint8_t n = chrone_alarm_enabled_count();
+    const uint16_t fg = ui_color_to_rgb565(ui_color_alarm_icon());
+    const uint16_t bg = ui_color_to_rgb565(ui_color_bg());
+    chrone_alarm_icon_render_rgb565(s_alarm_icon_buf, fg, bg, n);
+    lv_image_set_src(s_alarm_icon_img, &s_alarm_icon_dsc);
+}
+
 static void update_alarm_indicator(void)
 {
     if (!s_alarm_icon_img) {
@@ -236,17 +246,16 @@ static void update_alarm_indicator(void)
         return;
     }
 
-    const bool on = chrone_alarm_scheduling_enabled();
-    if (on == s_prev_alarm_indicator) {
+    const uint8_t n = chrone_alarm_enabled_count();
+    const bool on = n > 0;
+    if (on == s_prev_alarm_indicator && (int)n == s_prev_alarm_badge_count) {
         return;
     }
     s_prev_alarm_indicator = on;
+    s_prev_alarm_badge_count = (int)n;
 
     if (on) {
-        const uint16_t fg = ui_color_to_rgb565(ui_color_alarm_icon());
-        const uint16_t bg = ui_color_to_rgb565(ui_color_bg());
-        chrone_alarm_icon_render_rgb565(s_alarm_icon_buf, fg, bg);
-        lv_image_set_src(s_alarm_icon_img, &s_alarm_icon_dsc);
+        alarm_icon_draw_idle();
         lv_obj_remove_flag(s_alarm_icon_img, LV_OBJ_FLAG_HIDDEN);
     } else {
         lv_obj_add_flag(s_alarm_icon_img, LV_OBJ_FLAG_HIDDEN);
@@ -482,18 +491,19 @@ static esp_err_t create_header_labels(lv_obj_t *screen)
     std::memset(&s_alarm_icon_dsc, 0, sizeof(s_alarm_icon_dsc));
     s_alarm_icon_dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
     s_alarm_icon_dsc.header.cf = LV_COLOR_FORMAT_RGB565;
-    s_alarm_icon_dsc.header.w = CHRONE_ALARM_ICON_SZ;
-    s_alarm_icon_dsc.header.h = CHRONE_ALARM_ICON_SZ;
-    s_alarm_icon_dsc.header.stride = CHRONE_ALARM_ICON_SZ * 2;
+    s_alarm_icon_dsc.header.w = CHRONE_ALARM_ICON_CANVAS_W;
+    s_alarm_icon_dsc.header.h = CHRONE_ALARM_ICON_CANVAS_H;
+    s_alarm_icon_dsc.header.stride = CHRONE_ALARM_ICON_CANVAS_W * 2;
     s_alarm_icon_dsc.data_size = sizeof(s_alarm_icon_buf);
     s_alarm_icon_dsc.data = reinterpret_cast<const uint8_t *>(s_alarm_icon_buf);
 
     s_alarm_icon_img = lv_image_create(screen);
     lv_image_set_src(s_alarm_icon_img, &s_alarm_icon_dsc);
-    lv_obj_set_size(s_alarm_icon_img, CHRONE_ALARM_ICON_SZ, CHRONE_ALARM_ICON_SZ);
+    lv_obj_set_size(s_alarm_icon_img, CHRONE_ALARM_ICON_CANVAS_W, CHRONE_ALARM_ICON_CANVAS_H);
     lv_obj_align(s_alarm_icon_img, LV_ALIGN_TOP_MID, 0, 6);
     lv_obj_add_flag(s_alarm_icon_img, LV_OBJ_FLAG_HIDDEN);
     s_prev_alarm_indicator = false;
+    s_prev_alarm_badge_count = -1;
     update_alarm_indicator();
 
     return ESP_OK;
@@ -659,7 +669,8 @@ static void alarm_icon_redraw_local_fg(lv_color_t fg)
     }
     const uint16_t fg565 = ui_color_to_rgb565(fg);
     const uint16_t bg565 = ui_color_to_rgb565(ui_color_bg());
-    chrone_alarm_icon_render_rgb565(s_alarm_icon_buf, fg565, bg565);
+    const uint8_t badge = chrone_alarm_enabled_count();
+    chrone_alarm_icon_render_rgb565(s_alarm_icon_buf, fg565, bg565, badge);
     lv_image_set_src(s_alarm_icon_img, &s_alarm_icon_dsc);
     lv_obj_remove_flag(s_alarm_icon_img, LV_OBJ_FLAG_HIDDEN);
     alarm_icon_invalidate_local();
@@ -694,7 +705,8 @@ static void start_alarm_icon_blink(void)
 
 static void restore_alarm_indicator_after_ring(void)
 {
-    s_prev_alarm_indicator = !chrone_alarm_scheduling_enabled();
+    s_prev_alarm_indicator = false;
+    s_prev_alarm_badge_count = -1;
     update_alarm_indicator();
 }
 
@@ -870,6 +882,7 @@ static void release_clock_handles(void)
     s_label_week = nullptr;
     s_alarm_icon_img = nullptr;
     s_prev_alarm_indicator = false;
+    s_prev_alarm_badge_count = -1;
     s_footer_row = nullptr;
     s_weather_icon_img = nullptr;
     s_label_weather_text = nullptr;

@@ -64,8 +64,8 @@ typedef struct {
     bool     enabled;
     uint8_t  hour;      /* 0–23 */
     uint8_t  minute;    /* 0–59 */
-    uint8_t  repeat;    /* ONCE / DAILY / WEEKDAY / CUSTOM(可选) */
-    uint8_t  flags;     /* 如 ONCE 已响标记 */
+    uint8_t  repeat;    /* DAILY / WORKDAY / ONCE */
+    uint8_t  flags;     /* reserved */
 } chrone_alarm_t;
 ```
 
@@ -122,8 +122,8 @@ chrone_alarm_scheduling_enabled() ==
 ```text
 ┌──────── Alarms ────────┐
 │ [ON]  07:30  Daily     │
-│ [OFF] 08:00  Weekday   │
-│ [ON]  22:10  Once      │
+│ [OFF] 08:00  Workday   │
+│ [ON]  22:10  Daily     │
 │  (点条目进入编辑)       │
 └────────────────────────┘
 ```
@@ -134,7 +134,7 @@ chrone_alarm_scheduling_enabled() ==
 
 - `enabled` 开关  
 - 时、分（+/- 或 roller）  
-- 重复：**Once** / **Daily** / **Weekday**（P0）  
+- 重复：**Daily** / **Workday** / **Once**（P0）；Once 保存须 ≥2 分钟、响后自动关  
 - **Save** → 写 NVS → `nvs_commit` → 内存表更新，**无需重启**
 
 ### 5.3 与数字/模拟切换的关系
@@ -147,7 +147,7 @@ chrone_alarm_scheduling_enabled() ==
 ## 6. 调度与响铃
 
 - 挂接：现有 `chrone_ui` **1 Hz** tick → `chrone_time_get_local_tm` → `chrone_alarm_check_tick`。
-- 匹配：时、分、重复类型、`ONCE` 当日是否已响；同一分钟防重复触发。
+- 匹配：时、分、重复类型；同一分钟防重复触发。
 - 触发：`chrone_alarm_fire()` → 状态 `RINGING` → `chrone_audio` 播放 PCM/蜂鸣。
 
 ---
@@ -163,7 +163,8 @@ chrone_alarm_scheduling_enabled() ==
 
 - 停止 I2S / `Speaker_Enable(0)`  
 - 可选短振/LED 关闭  
-- `ONCE` 类型：可自动 `enabled=false` 并 `save`  
+- **Once**：到点响一次后 `enabled=false` 并保存；保存时须比「下次触发」≥2 分钟（英文提示 `Time too soon (need +2 min)`）
+- 关闭闹钟：编辑界面 **Enabled** 开关  
 
 **30s 超时** 仍保留（需求 FR-ALARM-02），与触摸/摇一摇并存。
 
@@ -210,6 +211,6 @@ chrone_alarm_scheduling_enabled() ==
 |----|------|
 | 闹钟槽位数 | **4 组**（`CHRONE_ALARM_MAX=4`） |
 | 进入配置 | **底部虚拟键左+右同时按下** |
-| 重复类型 | **Once** / **Daily** / **Weekday**（不做 Custom 位图） |
+| 重复类型 | **Daily** / **Workday** / **Once** |
 | 贪睡 Snooze | **阶段 4 不做**（留 V1.1+） |
 | 横屏虚拟键区域 | 首版按 AWS 底栏比例映射，实机微调 `chrone_input` |

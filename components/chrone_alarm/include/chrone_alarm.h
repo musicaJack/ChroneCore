@@ -12,19 +12,20 @@ extern "C" {
 #define CHRONE_ALARM_MAX 4
 
 typedef enum {
-    CHRONE_ALARM_REPEAT_ONCE = 0,
-    CHRONE_ALARM_REPEAT_DAILY = 1,
-    CHRONE_ALARM_REPEAT_WEEKDAY = 2,
+    CHRONE_ALARM_REPEAT_DAILY = 0,
+    CHRONE_ALARM_REPEAT_WORKDAY = 1,
+    CHRONE_ALARM_REPEAT_ONCE = 2,
 } chrone_alarm_repeat_t;
 
-#define CHRONE_ALARM_FLAG_FIRED_TODAY 0x01
+/** Once：距下一次触发的最短提前量（分钟） */
+#define CHRONE_ALARM_ONCE_MIN_LEAD_MIN 2
 
 typedef struct {
     bool enabled;
     uint8_t hour;
     uint8_t minute;
     uint8_t repeat;
-    uint8_t flags;
+    uint8_t flags; /* reserved, always 0 */
 } chrone_alarm_t;
 
 typedef enum {
@@ -38,6 +39,10 @@ esp_err_t chrone_alarm_get(uint8_t index, chrone_alarm_t *out);
 esp_err_t chrone_alarm_set(uint8_t index, const chrone_alarm_t *alarm);
 
 bool chrone_alarm_scheduling_enabled(void);
+/** 已开启（enabled）的闹钟条数，0..CHRONE_ALARM_MAX */
+uint8_t chrone_alarm_enabled_count(void);
+/** Once 且将保存为 ON 时：下次触发须 ≥ CHRONE_ALARM_ONCE_MIN_LEAD_MIN 分钟后 */
+bool chrone_alarm_once_time_ok(uint8_t hour, uint8_t minute);
 chrone_alarm_state_t chrone_alarm_get_state(void);
 int chrone_alarm_ringing_index(void);
 

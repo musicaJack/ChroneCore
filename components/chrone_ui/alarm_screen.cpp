@@ -28,13 +28,22 @@ static chrone::ui::AlarmTimePicker s_time_picker;
 static const char *repeat_str(uint8_t r)
 {
     switch (r) {
-    case CHRONE_ALARM_REPEAT_DAILY:
-        return "Daily";
-    case CHRONE_ALARM_REPEAT_WEEKDAY:
-        return "Weekday";
-    default:
+    case CHRONE_ALARM_REPEAT_WORKDAY:
+        return "Workday";
+    case CHRONE_ALARM_REPEAT_ONCE:
         return "Once";
+    case CHRONE_ALARM_REPEAT_DAILY:
+    default:
+        return "Daily";
     }
+}
+
+static uint8_t normalize_edit_repeat(uint8_t r)
+{
+    if (r == CHRONE_ALARM_REPEAT_WORKDAY || r == CHRONE_ALARM_REPEAT_ONCE) {
+        return r;
+    }
+    return CHRONE_ALARM_REPEAT_DAILY;
 }
 
 static void refresh_repeat_label(void)
@@ -52,7 +61,17 @@ static void refresh_rings_at_label(void)
     uint8_t h = 0;
     uint8_t m = 0;
     s_time_picker.get_time(&h, &m);
+    lv_obj_set_style_text_color(s_lbl_rings_at, lv_color_hex(0x7A8499), 0);
     lv_label_set_text_fmt(s_lbl_rings_at, "Rings at %02u:%02u (24h)", h, m);
+}
+
+static void show_once_time_error(void)
+{
+    if (!s_lbl_rings_at) {
+        return;
+    }
+    lv_obj_set_style_text_color(s_lbl_rings_at, lv_color_hex(0xFF5028), 0);
+    lv_label_set_text(s_lbl_rings_at, "Time too soon (need +2 min)");
 }
 
 static void show_list_panel(void);
@@ -77,7 +96,16 @@ static void save_edit_and_back(void)
         a.enabled = lv_obj_has_state(s_sw_enabled, LV_STATE_CHECKED);
     }
     a.repeat = s_edit_repeat;
-    chrone_alarm_set((uint8_t)s_edit_index, &a);
+    if (a.enabled && a.repeat == CHRONE_ALARM_REPEAT_ONCE
+        && !chrone_alarm_once_time_ok(a.hour, a.minute)) {
+        show_once_time_error();
+        ESP_LOGW(TAG, "Once alarm save rejected: < %d min ahead", CHRONE_ALARM_ONCE_MIN_LEAD_MIN);
+        return;
+    }
+    if (chrone_alarm_set((uint8_t)s_edit_index, &a) != ESP_OK) {
+        show_once_time_error();
+        return;
+    }
     chrone_alarm_save();
     chrone_haptic_confirm();
     ESP_LOGI(TAG, "saved alarm[%d] %02u:%02u %s", s_edit_index, a.hour, a.minute,
@@ -134,7 +162,13 @@ static void repeat_cycle_event(lv_event_t *e)
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
         return;
     }
-    s_edit_repeat = (uint8_t)((s_edit_repeat + 1) % (CHRONE_ALARM_REPEAT_WEEKDAY + 1));
+    if (s_edit_repeat == CHRONE_ALARM_REPEAT_DAILY) {
+        s_edit_repeat = CHRONE_ALARM_REPEAT_WORKDAY;
+    } else if (s_edit_repeat == CHRONE_ALARM_REPEAT_WORKDAY) {
+        s_edit_repeat = CHRONE_ALARM_REPEAT_ONCE;
+    } else {
+        s_edit_repeat = CHRONE_ALARM_REPEAT_DAILY;
+    }
     refresh_repeat_label();
     chrone_haptic_detent();
 }
@@ -251,7 +285,7 @@ static void build_edit_ui(int index)
     s_edit_index = index;
     chrone_alarm_t a = {};
     chrone_alarm_get((uint8_t)index, &a);
-    s_edit_repeat = a.repeat;
+    s_edit_repeat = normalize_edit_repeat(a.repeat);
 
     char title_buf[24];
     std::snprintf(title_buf, sizeof(title_buf), "Alarm #%d", index + 1);

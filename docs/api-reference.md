@@ -341,21 +341,24 @@ chrone_screen_t chrone_app_get_screen(void);
 #define CHRONE_ALARM_MAX 4
 
 typedef enum {
-    CHRONE_ALARM_REPEAT_ONCE = 0,
-    CHRONE_ALARM_REPEAT_DAILY,
-    CHRONE_ALARM_REPEAT_WEEKDAY,
+    CHRONE_ALARM_REPEAT_DAILY = 0,
+    CHRONE_ALARM_REPEAT_WORKDAY,
+    CHRONE_ALARM_REPEAT_ONCE,
 } chrone_alarm_repeat_t;
 
 typedef struct {
     bool enabled;
     uint8_t hour, minute;
     uint8_t repeat;     /* chrone_alarm_repeat_t */
-    uint8_t flags;      /* e.g. ONCE already fired today */
+    uint8_t flags;      /* reserved */
 } chrone_alarm_t;
 
 esp_err_t chrone_alarm_load(void);
 esp_err_t chrone_alarm_save(void);
 esp_err_t chrone_alarm_set(uint8_t index, const chrone_alarm_t *alarm);
+bool chrone_alarm_scheduling_enabled(void);
+uint8_t chrone_alarm_enabled_count(void);  /* 表盘图标角标 */
+bool chrone_alarm_once_time_ok(uint8_t hour, uint8_t minute);  /* Once 保存：≥2 分钟后 */
 void chrone_alarm_check_tick(const struct tm *now);  /* 每秒调用 */
 ```
 

@@ -307,6 +307,8 @@ void chrone_spi_bus_unlock(void);
 | `weather` | `wx_city` | string | 心知 location |
 | `chrone` | `clk_mode` | u8 | 0=数字 1=模拟 |
 | `chrone` | `brightness` | u8 | 0-100 |
+| `chrone` | `blank_timeout_s` | u32 | 无触摸关背光超时（已定 60 s） |
+| `chrone` | `deep_idle_after_display_off_s` | u32 | 关背光后再进 Deep idle（已定 300 s） |
 | `chrone` | `alarm_cfg` | blob | 闹钟数组序列化 |
 | `chrone` | `tz` | string | 时区（可选，v2） |
 

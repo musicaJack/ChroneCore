@@ -36,6 +36,12 @@ static void alarm_schedule_tick(void)
 {
     struct tm tm_local;
     if (chrone_time_get_local_tm(&tm_local) != ESP_OK) {
+        static uint32_t s_last_time_fail_log_ms;
+        const uint32_t now_ms = (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
+        if (now_ms - s_last_time_fail_log_ms >= 60000U) {
+            s_last_time_fail_log_ms = now_ms;
+            ESP_LOGW(TAG, "alarm_schedule_tick: chrone_time_get_local_tm failed");
+        }
         return;
     }
 
