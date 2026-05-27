@@ -256,12 +256,16 @@ flowchart TD
 
 ## 11. 闹钟子系统
 
+详见 [alarm-implementation.md](alarm-implementation.md)。
+
 | 组件 | 说明 |
 |------|------|
-| 存储 | NVS namespace `chrone`，key `alarm_0` … JSON 或二进制结构 |
-| 调度 | `ui_loop` 每秒 `chrone_alarm_check_tick()` |
-| 提醒 | `chrone_audio_play_*` + 可选 `chrone_led_*` + `vibration_trigger` |
-| 停止 | 触摸任意区或中键 |
+| 存储 | NVS namespace `chrone`，key `alarm_cfg`（定长 blob） |
+| 门控 | 至少一条 `enabled` 才 `chrone_alarm_scheduling_enabled()` |
+| 配置入口 | **底部虚拟键左+右同时按下** → 闹钟配置 LVGL（非长按屏幕） |
+| 调度 | 1 Hz `chrone_alarm_check_tick()` |
+| 提醒 | `chrone_audio` + 可选 `vibration` / SK6812 |
+| 停止 | **任意触摸** 或 **MPU6886 摇一摇**（+ 30s 超时） |
 
 ---
 

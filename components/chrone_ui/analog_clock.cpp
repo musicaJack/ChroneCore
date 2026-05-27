@@ -149,6 +149,14 @@ esp_err_t AnalogClockView::create(lv_obj_t *screen)
     return ESP_OK;
 }
 
+void AnalogClockView::detach()
+{
+    std::memset(s_numeral_labels, 0, sizeof(s_numeral_labels));
+    s_canvas = nullptr;
+    s_buf = nullptr;
+    hands_ok_ = false;
+}
+
 void AnalogClockView::destroy()
 {
     for (lv_obj_t *lb : s_numeral_labels) {
@@ -156,13 +164,7 @@ void AnalogClockView::destroy()
             lv_obj_delete(lb);
         }
     }
-    std::memset(s_numeral_labels, 0, sizeof(s_numeral_labels));
-    if (s_canvas) {
-        lv_obj_delete(s_canvas);
-        s_canvas = nullptr;
-    }
-    s_buf = nullptr;
-    hands_ok_ = false;
+    detach();
 }
 
 void AnalogClockView::tip_from_angle(float angle_deg, int length, int *tx, int *ty) const

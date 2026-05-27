@@ -163,21 +163,25 @@ BM8563 可用，系统时间正确，为时钟/闹钟提供基础。
 
 ### 目标
 
-多组闹钟、到点发声。
+多组闹钟、手动配置写入 NVS、到点发声；**仅当 NVS 存在有效且启用的闹钟** 才参与调度。详见 [alarm-implementation.md](alarm-implementation.md)。
 
 ### 任务
 
 | # | 任务 | 产出 | 参考 |
 |---|------|------|------|
-| 4.1 | `chrone_alarm` NVS 读写 | 3～8 组闹钟 | requirements FR-ALARM |
-| 4.2 | 移植 AWS `speaker` 或 ESP-IDF I2S 播放 | `chrone_audio_play_tone` | AWS `speaker.c` |
-| 4.3 | 闹钟 UI：列表、开关、时、分、重复 | `alarm_ui.c` | — |
-| 4.4 | 到点调度 + 播放任务 + 触摸停止 | 铃声可停 | — |
-| 4.5 | 可选：`vibration_trigger` + SK6812 闪烁 | 多模态提醒 | 2048 `vibration` |
+| 4.1 | `chrone_alarm` NVS（`chrone`/`alarm_cfg`）+ 调度门控 | **4 组**，Once/Daily/Weekday | requirements FR-ALARM |
+| 4.2 | `chrone_input`：**左+右虚拟键同时按下** 进闹钟配置 | chord 检测 | AWS `button_left/right` |
+| 4.3 | 闹钟 UI：列表、编辑、Save 写 NVS | `alarm_screen` | alarm-implementation §5 |
+| 4.4 | 每秒 `check_tick` + 响铃状态机 | RINGING | — |
+| 4.5 | `chrone_audio` I2S 播放 | `speaker.c` | AWS Core2 |
+| 4.6 | 停止：**任意触摸** + **摇一摇（MPU6886）** + 30s 超时 | dismiss | api-reference `chrone_imu` |
+| 4.7 | 可选：`vibration_trigger` + SK6812 | 多模态 | 2048 `vibration` |
 
 ### 验收
 
-- [ ] 设置 1 分钟后闹钟，到时播放
+- [ ] 左+右同时按下进入闹钟页，Save 后重启配置仍在
+- [ ] 无 enabled 闹钟时不响铃
+- [ ] 设 1 分钟后闹钟，到时播放；触摸或摇一摇可停
 - [ ] 麦/喇叭不同时开启（代码审查 + 实测）
 
 ---
@@ -216,7 +220,7 @@ BM8563 可用，系统时间正确，为时钟/闹钟提供基础。
 | # | 任务 | 优先级 | 参考 |
 |---|------|--------|------|
 | 6.1 | SK6812 统一 `chrone_led`（配网中=蓝，闹钟=红） | P1 | AWS SK6812 |
-| 6.2 | MPU6886 摇一摇关闭响铃 | P2 | 2048 `shake_*` / AWS `mpu.c` |
+| 6.2 | MPU6886 摇一摇关闹钟（若阶段 4 已做则仅调参/亮屏唤醒） | P2 | 阶段 4 `chrone_imu_shake_detected` |
 | 6.3 | TF 卡挂载 + SPI 互斥 | P3 | AWS `sdcard` |
 | 6.4 | 设置页：亮度、关于、恢复配网 | P1 | 2048 背光 API |
 | 6.5 | OTA 分区与升级（可选） | P2 | ESP-IDF OTA |

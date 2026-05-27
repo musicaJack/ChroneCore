@@ -8,6 +8,8 @@
 #define CHRONE_HEADER_FONT_SIZE  22
 #define CHRONE_HEADER_H            36
 #define CHRONE_FOOTER_H            32
+/** 底部三区虚拟键高度（与 Core2-for-AWS Button_Attach h=60 一致） */
+#define CHRONE_VIRTUAL_BTN_H         60
 #define CHRONE_WEATHER_ICON_SZ     24
 
 /* DSEG7 bitmap font (see components/chrone_ui/fonts/) */
@@ -16,6 +18,16 @@
 
 #define CHRONE_TIME_BLOCK_H      CHRONE_TIME_FONT_LINE_H
 #define CHRONE_TIME_Y            (CHRONE_HEADER_H + ((CHRONE_LCD_H - CHRONE_HEADER_H - CHRONE_FOOTER_H - CHRONE_TIME_BLOCK_H) / 2))
+
+/** 闹钟页顶栏（返回键热区，需保持最前层） */
+#define CHRONE_ALARM_HEADER_H      42
+#define CHRONE_ALARM_NAV_BTN_W     88
+#define CHRONE_ALARM_NAV_BTN_H     40
+
+/** 闹钟编辑页：DSEG 滚轮与控件分区 */
+#define CHRONE_ALARM_PICKER_Y      (CHRONE_ALARM_HEADER_H + 4)
+#define CHRONE_ALARM_PICKER_H      CHRONE_TIME_FONT_LINE_H
+#define CHRONE_ALARM_META_Y        (CHRONE_ALARM_PICKER_Y + CHRONE_ALARM_PICKER_H + 10)
 
 /* Analog dial (DS3231_Clock style, 320×240 landscape) */
 #define CHRONE_ANALOG_RADIUS       86

@@ -8,6 +8,7 @@
 #include "esp_lvgl_port.h"
 
 static const char *TAG = "chrone_hal";
+static esp_lcd_touch_handle_t s_touch;
 
 static esp_err_t init_touch_indev(lv_display_t *disp)
 {
@@ -54,6 +55,7 @@ static esp_err_t init_touch_indev(lv_display_t *disp)
         ESP_LOGW(TAG, "touch ft5x06: %s", esp_err_to_name(ret));
         return ret;
     }
+    s_touch = tp;
 
     const lvgl_port_touch_cfg_t lv_touch = {
         .disp = disp,
@@ -76,4 +78,9 @@ esp_err_t chrone_hal_touch_init(lv_display_t *disp)
         return ret;
     }
     return init_touch_indev(disp);
+}
+
+esp_lcd_touch_handle_t chrone_hal_get_touch(void)
+{
+    return s_touch;
 }

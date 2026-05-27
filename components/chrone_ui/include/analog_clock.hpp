@@ -15,6 +15,8 @@ public:
 
     esp_err_t create(lv_obj_t *screen);
     void destroy();
+    /** 屏子对象即将被批量删除时只清空指针，避免对已释放对象 lv_obj_delete */
+    void detach();
 
     void paint_static_dial();
     void on_second_tick(const struct tm *tm);

@@ -338,12 +338,19 @@ chrone_screen_t chrone_app_get_screen(void);
 ### 3.2 闹钟 `chrone_alarm`
 
 ```c
-#define CHRONE_ALARM_MAX 8
+#define CHRONE_ALARM_MAX 4
+
+typedef enum {
+    CHRONE_ALARM_REPEAT_ONCE = 0,
+    CHRONE_ALARM_REPEAT_DAILY,
+    CHRONE_ALARM_REPEAT_WEEKDAY,
+} chrone_alarm_repeat_t;
 
 typedef struct {
     bool enabled;
     uint8_t hour, minute;
-    uint8_t repeat_mask;  /* bit0-6: 日-六 */
+    uint8_t repeat;     /* chrone_alarm_repeat_t */
+    uint8_t flags;      /* e.g. ONCE already fired today */
 } chrone_alarm_t;
 
 esp_err_t chrone_alarm_load(void);

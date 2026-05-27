@@ -52,16 +52,22 @@
 - [x] 移植 HourChime 天气图标：`weather_icon_map` + `icons_48x48/` + 1-bit→RGB565（24×24 显示）
 - [x] `chrone_ui` 底栏天气带 + `weather_info.text` / `code`；界面仅英文，不用中文
 - [x] 顶栏星期统一 `chrone_time_weekday_en`（去掉中文星期显示）
-- [ ] 实机：底栏图标与 Cloudy/Rainy 文案显示验收
+- [x] 实机：底栏图标与 Cloudy/Clear/Rainy 文案显示验收
 
 ---
 
 ## 阶段 4 — 闹钟与音频
 
-- [ ] `chrone_alarm` NVS 多组闹钟
-- [ ] 扬声器播放（AWS/ESP-IDF I2S，与麦克风互斥）
-- [ ] 闹钟 UI + 到点响铃/停止
-- [ ] 可选：震动 + SK6812 提醒
+（方案见 [alarm-implementation.md](alarm-implementation.md)）
+
+- [x] `chrone_alarm`：`alarm_cfg` NVS + 仅 enabled 时调度
+- [x] 进入配置：主钟区长按 3s（原左+右 chord 已改）
+- [x] 闹钟 UI：DSEG 滚轮编辑 + 列表/返回；顶栏闹钟图标
+- [x] `chrone_audio` I2S 蜂鸣（880Hz 断续音，BSP `esp_codec_dev`）
+- [x] 停止：响铃层触摸 + 表盘点击 + 60s 超时
+- [x] 响铃震动：AXP192 马达周期脉冲（`vibration`）
+- [ ] `chrone_imu` MPU6886 摇一摇关闹钟（仍为桩）
+- [ ] 可选：SK6812 提醒 / 自定义铃声 PCM
 
 ---
 
@@ -77,7 +83,7 @@
 ## 阶段 6 — 收尾与 V1.0
 
 - [ ] SK6812 状态指示（可选）
-- [ ] MPU6886 摇一摇关闹钟（可选）
+- [ ] MPU6886 亮屏唤醒等（摇一摇关闹钟已在阶段 4 实现则此项为增强）
 - [ ] TF 卡 + SPI 互斥（可选）
 - [ ] 设置页：亮度、强制配网、关于
 - [ ] 全量测试表（见 development-plan.md §10）

@@ -1,6 +1,10 @@
 #include "chrone_ui.h"
 
 #include "analog_clock.hpp"
+#include "chrone_alarm.h"
+#include "chrone_alarm_icon.h"
+#include "chrone_alarm_icon_bitmap.h"
+#include "chrone_input.h"
 #include "chrone_font_dseg56.h"
 #include "chrone_time.h"
 #include "chrone_weather.h"
@@ -24,6 +28,10 @@ static lv_obj_t *s_screen;
 static lv_obj_t *s_tap_layer;
 static lv_obj_t *s_label_date;
 static lv_obj_t *s_label_week;
+static lv_obj_t *s_alarm_icon_img;
+static uint16_t s_alarm_icon_buf[CHRONE_ALARM_ICON_SZ * CHRONE_ALARM_ICON_SZ];
+static lv_image_dsc_t s_alarm_icon_dsc;
+static bool s_prev_alarm_indicator;
 static lv_obj_t *s_footer_row;
 static lv_obj_t *s_weather_icon_img;
 static lv_obj_t *s_label_weather_text;
@@ -41,6 +49,12 @@ static lv_obj_t *s_lb_mm;
 static lv_obj_t *s_lb_c2;
 static lv_obj_t *s_lb_ss;
 static lv_timer_t *s_tick_timer;
+static lv_obj_t *s_ring_label;
+static lv_timer_t *s_alarm_icon_blink_timer;
+static bool s_alarm_icon_blink_on;
+
+#define ALARM_ICON_BLINK_MS    380
+#define RING_TAP_HINT_Y_OFFSET 50
 static chrone::ui::AnalogClockView s_analog;
 static chrone_ui_mode_t s_mode = CHRONE_UI_MODE_DIGITAL;
 
@@ -53,13 +67,22 @@ static int s_prev_mday = -1;
 static int s_prev_wday = -1;
 static uint32_t s_last_tap_ms;
 
-static void destroy_clock_content(lv_obj_t *screen);
+/** 长按进入闹钟配置（ms） */
+#define CLOCK_LONG_PRESS_MS 3000
+static lv_timer_t *s_alarm_long_press_timer;
+static bool s_suppress_tap_click;
+
+static void release_clock_handles(void);
+static void clear_screen_children(lv_obj_t *screen);
 static esp_err_t rebuild_clock_screen(lv_obj_t *screen);
 
 static lv_color_t ui_color_bg(void) { return lv_color_hex(0x06080C); }
 static lv_color_t ui_color_header(void) { return lv_color_hex(0xD8DCE8); }
 static lv_color_t ui_color_muted(void) { return lv_color_hex(0x7A8499); }
 static lv_color_t ui_color_seg_on(void) { return lv_color_hex(0xFFB020); }
+static lv_color_t ui_color_alarm_icon(void) { return lv_color_hex(0xFFB020); }
+/** 响铃闪烁：更亮的橙红色 */
+static lv_color_t ui_color_alarm_icon_ring(void) { return lv_color_hex(0xFF5028); }
 
 static void load_mode_from_nvs(void)
 {
@@ -203,6 +226,33 @@ static uint16_t ui_color_to_rgb565(lv_color_t c)
     return lv_color_to_u16(c);
 }
 
+static void update_alarm_indicator(void)
+{
+    if (!s_alarm_icon_img) {
+        return;
+    }
+    if (chrone_alarm_get_state() == CHRONE_ALARM_STATE_RINGING) {
+        return;
+    }
+
+    const bool on = chrone_alarm_scheduling_enabled();
+    if (on == s_prev_alarm_indicator) {
+        return;
+    }
+    s_prev_alarm_indicator = on;
+
+    if (on) {
+        const uint16_t fg = ui_color_to_rgb565(ui_color_alarm_icon());
+        const uint16_t bg = ui_color_to_rgb565(ui_color_bg());
+        chrone_alarm_icon_render_rgb565(s_alarm_icon_buf, fg, bg);
+        lv_image_set_src(s_alarm_icon_img, &s_alarm_icon_dsc);
+        lv_obj_remove_flag(s_alarm_icon_img, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(s_alarm_icon_img, LV_OBJ_FLAG_HIDDEN);
+    }
+    lv_obj_invalidate(s_alarm_icon_img);
+}
+
 static void update_weather_icon(int code, bool is_day)
 {
     if (!s_weather_icon_img) {
@@ -338,7 +388,8 @@ static void show_provisioning_ui(void)
     if (!s_screen || s_prov_ui) {
         return;
     }
-    destroy_clock_content(s_screen);
+    release_clock_handles();
+    clear_screen_children(s_screen);
     s_prov_ui = true;
     lv_obj_set_style_bg_color(s_screen, ui_color_bg(), 0);
     create_provisioning_screen(s_screen);
@@ -385,11 +436,16 @@ static void tick_timer_cb(lv_timer_t *timer)
     }
 
     update_header(&tm_local, false);
+    update_alarm_indicator();
     update_weather_strip(&tm_local);
     if (s_mode == CHRONE_UI_MODE_DIGITAL) {
         update_time_parts(&tm_local, false);
     } else if (s_analog.is_ready()) {
         s_analog.on_second_tick(&tm_local);
+    }
+
+    if (!chrone_ui_alarm_config_active()) {
+        chrone_ui_update_ringing();
     }
 }
 
@@ -421,6 +477,24 @@ static esp_err_t create_header_labels(lv_obj_t *screen)
     lv_obj_set_style_text_font(s_label_week, &lv_font_montserrat_14, 0);
     lv_label_set_text(s_label_week, "---");
     lv_obj_align(s_label_week, LV_ALIGN_TOP_RIGHT, -8, 8);
+
+    std::memset(&s_alarm_icon_dsc, 0, sizeof(s_alarm_icon_dsc));
+    s_alarm_icon_dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
+    s_alarm_icon_dsc.header.cf = LV_COLOR_FORMAT_RGB565;
+    s_alarm_icon_dsc.header.w = CHRONE_ALARM_ICON_SZ;
+    s_alarm_icon_dsc.header.h = CHRONE_ALARM_ICON_SZ;
+    s_alarm_icon_dsc.header.stride = CHRONE_ALARM_ICON_SZ * 2;
+    s_alarm_icon_dsc.data_size = sizeof(s_alarm_icon_buf);
+    s_alarm_icon_dsc.data = reinterpret_cast<const uint8_t *>(s_alarm_icon_buf);
+
+    s_alarm_icon_img = lv_image_create(screen);
+    lv_image_set_src(s_alarm_icon_img, &s_alarm_icon_dsc);
+    lv_obj_set_size(s_alarm_icon_img, CHRONE_ALARM_ICON_SZ, CHRONE_ALARM_ICON_SZ);
+    lv_obj_align(s_alarm_icon_img, LV_ALIGN_TOP_MID, 0, 6);
+    lv_obj_add_flag(s_alarm_icon_img, LV_OBJ_FLAG_HIDDEN);
+    s_prev_alarm_indicator = false;
+    update_alarm_indicator();
+
     return ESP_OK;
 }
 
@@ -543,9 +617,217 @@ static esp_err_t create_analog_widgets(lv_obj_t *screen)
     return create_footer_bar(screen);
 }
 
-static void tap_toggle_event_cb(lv_event_t *e)
+static void ring_dismiss_event_cb(lv_event_t *e)
 {
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
+    const lv_event_code_t code = lv_event_get_code(e);
+    if (code != LV_EVENT_PRESSED && code != LV_EVENT_CLICKED && code != LV_EVENT_RELEASED) {
+        return;
+    }
+    if (chrone_alarm_get_state() != CHRONE_ALARM_STATE_RINGING) {
+        return;
+    }
+    chrone_alarm_dismiss();
+}
+
+static void stop_alarm_icon_blink_timer(void)
+{
+    if (s_alarm_icon_blink_timer) {
+        lv_timer_delete(s_alarm_icon_blink_timer);
+        s_alarm_icon_blink_timer = nullptr;
+    }
+}
+
+static void alarm_icon_invalidate_local(void)
+{
+    if (!s_alarm_icon_img) {
+        return;
+    }
+    lv_area_t area;
+    lv_obj_get_coords(s_alarm_icon_img, &area);
+    lv_obj_invalidate_area(s_alarm_icon_img, &area);
+    if (s_screen) {
+        lv_obj_invalidate_area(s_screen, &area);
+    }
+}
+
+/** 局部清除：24×24 缓冲区填表盘底色，仅刷新图标区域 */
+static void alarm_icon_clear_local(void)
+{
+    if (!s_alarm_icon_img) {
+        return;
+    }
+    const uint16_t bg = ui_color_to_rgb565(ui_color_bg());
+    const size_t n = CHRONE_ALARM_ICON_SZ * CHRONE_ALARM_ICON_SZ;
+    for (size_t i = 0; i < n; ++i) {
+        s_alarm_icon_buf[i] = bg;
+    }
+    lv_image_set_src(s_alarm_icon_img, &s_alarm_icon_dsc);
+    lv_obj_remove_flag(s_alarm_icon_img, LV_OBJ_FLAG_HIDDEN);
+    alarm_icon_invalidate_local();
+}
+
+/** 局部重绘：重新光栅化闹钟图标并只刷新该区域 */
+static void alarm_icon_redraw_local(void)
+{
+    if (!s_alarm_icon_img) {
+        return;
+    }
+    const uint16_t fg = ui_color_to_rgb565(ui_color_alarm_icon_ring());
+    const uint16_t bg = ui_color_to_rgb565(ui_color_bg());
+    chrone_alarm_icon_render_rgb565(s_alarm_icon_buf, fg, bg);
+    lv_image_set_src(s_alarm_icon_img, &s_alarm_icon_dsc);
+    lv_obj_remove_flag(s_alarm_icon_img, LV_OBJ_FLAG_HIDDEN);
+    alarm_icon_invalidate_local();
+}
+
+static void alarm_icon_blink_timer_cb(lv_timer_t *timer)
+{
+    (void)timer;
+    if (!s_alarm_icon_img || chrone_alarm_get_state() != CHRONE_ALARM_STATE_RINGING) {
+        return;
+    }
+    s_alarm_icon_blink_on = !s_alarm_icon_blink_on;
+    if (s_alarm_icon_blink_on) {
+        alarm_icon_redraw_local();
+    } else {
+        alarm_icon_clear_local();
+    }
+}
+
+static void start_alarm_icon_blink(void)
+{
+    stop_alarm_icon_blink_timer();
+    s_alarm_icon_blink_on = true;
+    alarm_icon_redraw_local();
+    s_alarm_icon_blink_timer = lv_timer_create(alarm_icon_blink_timer_cb, ALARM_ICON_BLINK_MS, nullptr);
+    if (s_alarm_icon_blink_timer) {
+        lv_timer_set_repeat_count(s_alarm_icon_blink_timer, -1);
+    }
+}
+
+static void restore_alarm_indicator_after_ring(void)
+{
+    s_prev_alarm_indicator = !chrone_alarm_scheduling_enabled();
+    update_alarm_indicator();
+}
+
+static void destroy_ringing_ui(void)
+{
+    stop_alarm_icon_blink_timer();
+    restore_alarm_indicator_after_ring();
+    if (s_ring_label) {
+        lv_obj_delete(s_ring_label);
+        s_ring_label = nullptr;
+    }
+}
+
+static void create_ringing_hint(lv_obj_t *screen)
+{
+    if (s_ring_label || !screen) {
+        return;
+    }
+
+    s_ring_label = lv_label_create(screen);
+    lv_label_set_text(s_ring_label, "Tap to stop");
+    lv_obj_set_style_text_color(s_ring_label, lv_color_hex(0xFFE0A0), 0);
+    lv_obj_set_style_text_align(s_ring_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(s_ring_label, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_bg_opa(s_ring_label, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(s_ring_label, 0, 0);
+    lv_obj_align(s_ring_label, LV_ALIGN_CENTER, 0, RING_TAP_HINT_Y_OFFSET);
+    lv_obj_add_flag(s_ring_label, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(s_ring_label, ring_dismiss_event_cb, LV_EVENT_PRESSED, nullptr);
+    lv_obj_add_event_cb(s_ring_label, ring_dismiss_event_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_add_event_cb(s_ring_label, ring_dismiss_event_cb, LV_EVENT_RELEASED, nullptr);
+    lv_obj_move_foreground(s_ring_label);
+}
+
+extern "C" void chrone_ui_update_ringing(void)
+{
+    if (!s_screen) {
+        return;
+    }
+
+    if (chrone_alarm_get_state() == CHRONE_ALARM_STATE_RINGING) {
+        create_ringing_hint(s_screen);
+        start_alarm_icon_blink();
+        if (s_alarm_icon_img) {
+            lv_obj_move_foreground(s_alarm_icon_img);
+        }
+        if (s_ring_label) {
+            lv_obj_move_foreground(s_ring_label);
+        }
+        if (s_tap_layer) {
+            lv_obj_add_flag(s_tap_layer, LV_OBJ_FLAG_HIDDEN);
+        }
+    } else {
+        destroy_ringing_ui();
+        if (s_tap_layer) {
+            lv_obj_remove_flag(s_tap_layer, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+}
+
+static void alarm_long_press_timer_cb(lv_timer_t *timer)
+{
+    (void)timer;
+    if (chrone_ui_alarm_config_active()) {
+        return;
+    }
+    if (chrone_alarm_get_state() == CHRONE_ALARM_STATE_RINGING) {
+        return;
+    }
+
+    s_suppress_tap_click = true;
+    lv_obj_t *screen = s_screen ? s_screen : lv_scr_act();
+    if (screen) {
+        chrone_ui_show_alarm_config(screen);
+        ESP_LOGI(TAG, "long press %d ms -> alarm config", CLOCK_LONG_PRESS_MS);
+    }
+}
+
+static void tap_layer_event_cb(lv_event_t *e)
+{
+    const lv_event_code_t code = lv_event_get_code(e);
+
+    if (code == LV_EVENT_PRESSED) {
+        if (chrone_ui_alarm_config_active()) {
+            return;
+        }
+        if (chrone_alarm_get_state() == CHRONE_ALARM_STATE_RINGING) {
+            return;
+        }
+        s_suppress_tap_click = false;
+        if (!s_alarm_long_press_timer) {
+            s_alarm_long_press_timer = lv_timer_create(alarm_long_press_timer_cb, CLOCK_LONG_PRESS_MS, nullptr);
+            if (s_alarm_long_press_timer) {
+                lv_timer_set_repeat_count(s_alarm_long_press_timer, 1);
+            }
+        } else {
+            lv_timer_reset(s_alarm_long_press_timer);
+            lv_timer_resume(s_alarm_long_press_timer);
+        }
+        return;
+    }
+
+    if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+        if (s_alarm_long_press_timer) {
+            lv_timer_pause(s_alarm_long_press_timer);
+        }
+        return;
+    }
+
+    if (code != LV_EVENT_CLICKED) {
+        return;
+    }
+
+    if (s_suppress_tap_click) {
+        s_suppress_tap_click = false;
+        return;
+    }
+
+    if (chrone_alarm_get_state() == CHRONE_ALARM_STATE_RINGING) {
+        chrone_alarm_dismiss();
         return;
     }
 
@@ -566,22 +848,41 @@ static void tap_toggle_event_cb(lv_event_t *e)
 static void create_tap_layer(lv_obj_t *screen)
 {
     s_tap_layer = lv_obj_create(screen);
-    lv_obj_set_size(s_tap_layer, CHRONE_LCD_W, CHRONE_LCD_H);
-    lv_obj_align(s_tap_layer, LV_ALIGN_CENTER, 0, 0);
+    /* 不覆盖底部 60px，留给 Core2 三区虚拟键（与 AWS Button_Attach 同高） */
+    lv_obj_set_size(s_tap_layer, CHRONE_LCD_W, CHRONE_LCD_H - CHRONE_VIRTUAL_BTN_H);
+    lv_obj_align(s_tap_layer, LV_ALIGN_TOP_MID, 0, 0);
     lv_obj_set_style_bg_opa(s_tap_layer, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(s_tap_layer, 0, 0);
     lv_obj_remove_flag(s_tap_layer, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(s_tap_layer, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(s_tap_layer, tap_toggle_event_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_add_event_cb(s_tap_layer, tap_layer_event_cb, LV_EVENT_PRESSED, nullptr);
+    lv_obj_add_event_cb(s_tap_layer, tap_layer_event_cb, LV_EVENT_RELEASED, nullptr);
+    lv_obj_add_event_cb(s_tap_layer, tap_layer_event_cb, LV_EVENT_PRESS_LOST, nullptr);
+    lv_obj_add_event_cb(s_tap_layer, tap_layer_event_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_move_foreground(s_tap_layer);
 }
 
-static void clear_widget_ptrs(void)
+static void release_clock_handles(void)
 {
-    s_analog.destroy();
+    stop_tick_timer();
+    chrone_input_unbind_screen();
+
+    if (s_alarm_long_press_timer) {
+        lv_timer_delete(s_alarm_long_press_timer);
+        s_alarm_long_press_timer = nullptr;
+    }
+    s_suppress_tap_click = false;
+
+    /* 响铃层/表盘控件会随 screen 子对象一起删掉，此处只丢弃悬空指针 */
+    stop_alarm_icon_blink_timer();
+    s_ring_label = nullptr;
+    s_analog.detach();
+
     s_tap_layer = nullptr;
     s_label_date = nullptr;
     s_label_week = nullptr;
+    s_alarm_icon_img = nullptr;
+    s_prev_alarm_indicator = false;
     s_footer_row = nullptr;
     s_weather_icon_img = nullptr;
     s_label_weather_text = nullptr;
@@ -598,21 +899,22 @@ static void clear_widget_ptrs(void)
     s_lb_ss = nullptr;
 }
 
-static void destroy_clock_content(lv_obj_t *screen)
+static void clear_screen_children(lv_obj_t *screen)
 {
-    stop_tick_timer();
-    clear_widget_ptrs();
-    if (screen) {
-        const uint32_t n = lv_obj_get_child_count(screen);
-        for (uint32_t i = n; i > 0; --i) {
-            lv_obj_delete(lv_obj_get_child(screen, i - 1));
-        }
+    if (!screen) {
+        return;
+    }
+    const uint32_t n = lv_obj_get_child_count(screen);
+    for (uint32_t i = n; i > 0; --i) {
+        lv_obj_delete(lv_obj_get_child(screen, i - 1));
     }
 }
 
 static esp_err_t rebuild_clock_screen(lv_obj_t *screen)
 {
-    destroy_clock_content(screen);
+    release_clock_handles();
+    clear_screen_children(screen);
+    reset_tick_cache();
 
     lv_obj_set_style_bg_color(screen, ui_color_bg(), 0);
     lv_obj_add_flag(screen, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
@@ -628,9 +930,24 @@ static esp_err_t rebuild_clock_screen(lv_obj_t *screen)
     }
 
     create_tap_layer(screen);
+    chrone_input_bind_screen(screen);
     start_tick_timer();
     chrone_ui_refresh();
     return ESP_OK;
+}
+
+extern "C" void chrone_ui_pause_clock(void)
+{
+    release_clock_handles();
+}
+
+extern "C" esp_err_t chrone_ui_resume_clock(lv_obj_t *screen)
+{
+    if (!screen) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    s_screen = screen;
+    return rebuild_clock_screen(screen);
 }
 
 extern "C" esp_err_t chrone_ui_init(lv_obj_t *screen)
@@ -647,8 +964,9 @@ extern "C" esp_err_t chrone_ui_init(lv_obj_t *screen)
         return ret;
     }
 
-    ESP_LOGI(TAG, "clock UI ready (%s, tap to switch)",
-             s_mode == CHRONE_UI_MODE_DIGITAL ? "digital DSEG7" : "analog dial");
+    ESP_LOGI(TAG, "clock UI ready (%s, tap=mode, long press %d s=alarm)",
+             s_mode == CHRONE_UI_MODE_DIGITAL ? "digital DSEG7" : "analog dial",
+             CLOCK_LONG_PRESS_MS / 1000);
     return ESP_OK;
 }
 
@@ -660,6 +978,7 @@ extern "C" void chrone_ui_refresh(void)
     }
 
     update_header(&tm_local, true);
+    update_alarm_indicator();
     update_weather_strip(&tm_local);
     if (s_mode == CHRONE_UI_MODE_DIGITAL) {
         update_time_parts(&tm_local, true);
