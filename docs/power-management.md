@@ -2,19 +2,34 @@
 
 ChroneCore 节能策略：触摸亮屏、空闲超时、AXP192 外设电源门控、ESP32 浅睡配合 WiFi 调制解调器省电，以及降低后台网络活动。
 
-**状态：** 仅规划（固件尚未实现）。  
-**最后更新：** 2026-05-27
+**状态：** 完整方案仅规划（固件尚未实现）。**V1 子集**（仅关背光 + 触摸亮屏）见 [settings-and-display-idle.md](settings-and-display-idle.md)。  
+**最后更新：** 2026-06-03
 
-相关文档：[architecture.md](architecture.md)、[requirements.md](requirements.md)、[api-reference.md](api-reference.md) §1.2（AXP192 / 显示 / WiFi）。
+相关文档：[settings-and-display-idle.md](settings-and-display-idle.md)（**优先实现**）、[architecture.md](architecture.md)、[requirements.md](requirements.md)、[api-reference.md](api-reference.md) §1.2（AXP192 / 显示 / WiFi）。
 
 ---
 
-## 1. 目标
+## 0. V1 子集（当前交付范围）
+
+在 `chrone_power` / 浅睡 / AXP 关轨 **未就绪** 前，仅实现 **显示空闲（档位 A）**：
+
+| 项 | V1 决定 |
+|----|---------|
+| 关屏条件 | 无触摸 ≥ `blank_timeout_s`（**默认 120 s / 2 min**，设置页可改） |
+| 关屏动作 | `bsp_display_brightness_set(0)` |
+| 唤醒 | 触摸 → 背光恢复为 NVS `brightness` |
+| 不做 | 深度空闲、浅睡、关 LDO2/LDO3 |
+
+详见 [settings-and-display-idle.md](settings-and-display-idle.md) 状态机与验收表。
+
+---
+
+## 1. 目标（完整方案 V2+）
 
 | 目标 | 指标 |
 |------|------|
 | 冷启动 | **先显示时钟**（唤醒态）；UI 就绪后再启动空闲计时 |
-| 显示空闲 | **60 秒**无触摸 → 关背光（面板可仍供电） |
+| 显示空闲 | 无触摸 → 关背光（V1 默认 **120 s**；完整文档曾写 60 s，以 V1 需求为准） |
 | 深度空闲 | 进入显示空闲后 **5 分钟** → 关闭 AXP 供电轨 + CPU 浅睡 |
 | 唤醒 | 触摸恢复显示与外设；WiFi 保持连接（无需重新配网） |
 | 天气 | 仅 **4 小时**后台 HTTPS；触摸亮屏 **不**拉取 |
@@ -30,7 +45,7 @@ ChroneCore 节能策略：触摸亮屏、空闲超时、AXP192 外设电源门�
 
 | 档位 | 名称 | ESP32 CPU | WiFi | 显示 / 外设 | ChroneCore 用途 |
 |------|------|-----------|------|-------------|-----------------|
-| **A** | 显示关闭（Display idle） | 运行中 | 可选调制解调器省电 | 背光关（面板可仍供电） | 60 秒无触摸后的第一步 |
+| **A** | 显示关闭（Display idle） | 运行中 | 可选调制解调器省电 | 背光关（面板可仍供电） | **V1 已实现规格**：默认 120 s 无触摸（见 [settings-and-display-idle.md](settings-and-display-idle.md)） |
 | **B** | **深度空闲（Deep idle）**（规划） | **浅睡（Light sleep）** | **保持 STA**，调制解调器省电 | AXP：LCD 供电轨关、扬声器/震动关等 | 主要「深度节能」 |
 | **C** | 芯片深度睡眠 | Deep sleep | **断开** | 全部关闭 | **不适合** 常亮时钟 + WiFi |
 
@@ -103,7 +118,9 @@ stateDiagram-v2
     Awake --> Awake: 闹钟响铃（全功率）
 ```
 
-### 6.1 档位 A — 显示关闭（60 秒无触摸）
+### 6.1 档位 A — 显示关闭（V1：默认 120 秒无触摸）
+
+> V1 实现规格见 [settings-and-display-idle.md](settings-and-display-idle.md)。下列「60 秒」为完整方案历史描述，**V1 默认 2 分钟**。
 
 - 背光设为 **0**（`bsp_display_brightness_set(0)` 或 `axp192_set_lcd_backlight(false)`）。
 - ESP 与 LVGL 继续运行；**触摸轮询保持**（点击亮屏必需）。
@@ -218,7 +235,7 @@ V1 时钟类产品 **不要** 上 **ESP 深度睡眠**（档位 C）。
 
 | # | 参数 | 决定 |
 |---|------|------|
-| 1 | **关屏超时** | 最后一次触摸后 **60 s**（唤醒态下） |
+| 1 | **关屏超时** | V1：**120 s**（可配置）；完整方案曾定 60 s，见 [settings-and-display-idle.md](settings-and-display-idle.md) |
 | 2 | **进入深度空闲** | 进入显示关闭后 **5 min**（非 60 s 立即进入） |
 | 3 | **冷启动** | **先唤醒** — 显示时钟，再启动空闲计时（非启动即深度空闲） |
 | 4 | **天气（4 h）** | **仅后台定时器** — 触摸唤醒不发起 HTTPS |

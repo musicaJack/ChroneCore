@@ -4,6 +4,7 @@
 
 #include "analog_clock.hpp"
 
+#include "chrone_ui_layout.h"
 #include "clock_layout.h"
 
 #include "esp_attr.h"
@@ -138,7 +139,7 @@ esp_err_t AnalogClockView::create(lv_obj_t *screen)
 
     lv_canvas_set_buffer(s_canvas, s_buf, sz, sz, LV_COLOR_FORMAT_RGB565);
     lv_obj_align(s_canvas, LV_ALIGN_TOP_MID, 0, CHRONE_HEADER_H - 4);
-    lv_obj_remove_flag(s_canvas, LV_OBJ_FLAG_SCROLLABLE);
+    chrone_ui_no_scroll(s_canvas);
     lv_obj_remove_flag(s_canvas, LV_OBJ_FLAG_CLICKABLE);
 
     create_hour_numerals(screen);

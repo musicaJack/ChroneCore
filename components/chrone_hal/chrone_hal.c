@@ -1,5 +1,7 @@
 #include "chrone_hal.h"
 
+#include "chrone_display_idle.h"
+#include "chrone_settings.h"
 #include "axp192.h"
 #include "bsp/display.h"
 #include "bsp/esp-bsp.h"
@@ -125,10 +127,12 @@ static esp_err_t init_display(void)
         return ESP_FAIL;
     }
 
-    ret = bsp_display_brightness_set(60);
+    (void)chrone_settings_init();
+    ret = chrone_hal_set_brightness(chrone_settings_get_brightness());
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "brightness: %s", esp_err_to_name(ret));
     }
+    chrone_display_idle_init();
 
     ret = chrone_hal_touch_init(s_display);
     if (ret != ESP_OK) {
@@ -153,4 +157,17 @@ esp_err_t chrone_hal_init(void)
 bool chrone_hal_display_ready(void)
 {
     return s_display != NULL;
+}
+
+esp_err_t chrone_hal_set_brightness(uint8_t percent)
+{
+    if (percent > 100) {
+        percent = 100;
+    }
+    return bsp_display_brightness_set((int)percent);
+}
+
+esp_err_t chrone_hal_backlight_off(void)
+{
+    return bsp_display_brightness_set(0);
 }

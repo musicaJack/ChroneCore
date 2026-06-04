@@ -32,8 +32,17 @@ esp_err_t chrone_ui_resume_clock(lv_obj_t *screen);
 
 /** 闹钟配置界面（会清空当前屏子对象） */
 void chrone_ui_show_alarm_config(lv_obj_t *screen);
+void chrone_ui_show_settings_hub(lv_obj_t *screen);
 void chrone_ui_show_clock(void);
 bool chrone_ui_alarm_config_active(void);
+bool chrone_ui_in_settings_tree(void);
+void chrone_ui_alarm_config_leave(void);
+void chrone_ui_settings_leave(void);
+
+/** Settings 树内底栏中键：按返回栈回退一级（须在 LVGL 锁内调用） */
+void chrone_ui_nav_back(void);
+
+void chrone_ui_alarm_nav_back(void);
 
 /** 响铃全屏层（触摸停止） */
 void chrone_ui_update_ringing(void);

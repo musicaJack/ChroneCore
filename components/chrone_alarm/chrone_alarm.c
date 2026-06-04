@@ -1,6 +1,8 @@
 #include "chrone_alarm.h"
 
 #include "chrone_audio.h"
+#include "chrone_display_idle.h"
+#include "chrone_settings.h"
 #include "chrone_time.h"
 #include "vibration/vibration.h"
 
@@ -38,7 +40,24 @@ static int s_last_fire_ymd = -1;
 static int s_last_fire_hm = -1;
 
 #define RING_TIMEOUT_MS 60000
-#define VIBE_INTERVAL_MS 700
+
+static bool alarm_vibe_enabled(void)
+{
+    return chrone_settings_get_vibe_level() > 0;
+}
+
+static uint32_t alarm_vibe_interval_ms(void)
+{
+    switch (chrone_settings_get_vibe_level()) {
+    case 1:
+        return 1400;
+    case 3:
+        return 400;
+    case 2:
+    default:
+        return 700;
+    }
+}
 
 /** 旧 NVS：1=Daily → 现 0=Daily；0/1/2=Daily/Workday/Once */
 static uint8_t migrate_repeat(uint8_t repeat)
@@ -220,8 +239,11 @@ static void start_ringing(int index)
     s_ringing_index = index;
     s_ring_start_ms = (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
     s_last_vibe_ms = 0;
+    chrone_display_idle_wake();
     chrone_audio_alarm_start();
-    (void)vibration_trigger();
+    if (alarm_vibe_enabled()) {
+        (void)vibration_trigger();
+    }
     ESP_LOGW(TAG, "RINGING alarm[%d] %02u:%02u", index,
              s_alarms[index].hour, s_alarms[index].minute);
 }
@@ -414,7 +436,9 @@ void chrone_alarm_poll(void)
     }
     const uint32_t now_ms = (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
 
-    if (s_last_vibe_ms == 0 || (now_ms - s_last_vibe_ms) >= VIBE_INTERVAL_MS) {
+    if (alarm_vibe_enabled()
+        && (s_last_vibe_ms == 0
+            || (now_ms - s_last_vibe_ms) >= alarm_vibe_interval_ms())) {
         s_last_vibe_ms = now_ms;
         (void)vibration_trigger();
     }

@@ -172,15 +172,21 @@ typedef enum {
 ```mermaid
 stateDiagram-v2
     [*] --> CLOCK
-    CLOCK --> ALARM: 菜单/滑动
-    CLOCK --> STOPWATCH: 菜单/滑动
-    CLOCK --> SETTINGS: 菜单
-    CLOCK --> WIFI_PROV: 设置/强制配网
-    ALARM --> CLOCK: 返回
+    CLOCK --> SETTINGS_HUB: 长按表盘 3s
+    SETTINGS_HUB --> CLOCK: Back
+    SETTINGS_HUB --> ALARM_LIST: Alarms
+    SETTINGS_HUB --> SETTINGS_SUB: Display/Sound and vibration
+    ALARM_LIST --> ALARM_EDIT: 点条目
+    ALARM_EDIT --> ALARM_LIST: Back
+    ALARM_LIST --> SETTINGS_HUB: Back
+    SETTINGS_SUB --> SETTINGS_HUB: Back
+    CLOCK --> STOPWATCH: 后续/菜单
+    CLOCK --> WIFI_PROV: 配网
     STOPWATCH --> CLOCK: 返回
-    SETTINGS --> CLOCK: 返回
-    WIFI_PROV --> CLOCK: 配网完成重启后
+    WIFI_PROV --> CLOCK: 重启后
 ```
+
+详见 [setup-hub-design.md](setup-hub-design.md)。
 
 **STOPWATCH 子状态：**
 
@@ -306,9 +312,11 @@ void chrone_spi_bus_unlock(void);
 | `wifi` | （组件管理） | — | SSID 列表、`force_ap` |
 | `weather` | `wx_city` | string | 心知 location |
 | `chrone` | `clk_mode` | u8 | 0=数字 1=模拟 |
-| `chrone` | `brightness` | u8 | 0-100 |
-| `chrone` | `blank_timeout_s` | u32 | 无触摸关背光超时（已定 60 s） |
-| `chrone` | `deep_idle_after_display_off_s` | u32 | 关背光后再进 Deep idle（已定 300 s） |
+| `chrone` | `brightness` | u8 | 亮屏亮度 10–100（默认 60）；关屏时系统写 0 |
+| `chrone` | `blank_timeout_s` | u32 | 无触摸关背光超时（**V1 默认 120 s**，可设置页配置） |
+| `chrone` | `alarm_vol` | u8 | 闹钟音量 0–100（默认 68），见 [settings-and-display-idle.md](settings-and-display-idle.md) |
+| `chrone` | `vibe_level` | u8 | 震动档位 0–3（V1 映射脉冲时长） |
+| `chrone` | `deep_idle_after_display_off_s` | u32 | 关背光后再进 Deep idle（**V2**，默认 300 s，V1 不读） |
 | `chrone` | `alarm_cfg` | blob | 闹钟数组序列化 |
 | `chrone` | `tz` | string | 时区（可选，v2） |
 

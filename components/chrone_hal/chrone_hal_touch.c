@@ -9,6 +9,7 @@
 
 static const char *TAG = "chrone_hal";
 static esp_lcd_touch_handle_t s_touch;
+static lv_indev_t *s_lv_touch_indev;
 
 static esp_err_t init_touch_indev(lv_display_t *disp)
 {
@@ -61,7 +62,8 @@ static esp_err_t init_touch_indev(lv_display_t *disp)
         .disp = disp,
         .handle = tp,
     };
-    if (lvgl_port_add_touch(&lv_touch) == NULL) {
+    s_lv_touch_indev = lvgl_port_add_touch(&lv_touch);
+    if (s_lv_touch_indev == NULL) {
         ESP_LOGW(TAG, "lvgl_port_add_touch failed");
         return ESP_FAIL;
     }
@@ -83,4 +85,29 @@ esp_err_t chrone_hal_touch_init(lv_display_t *disp)
 esp_lcd_touch_handle_t chrone_hal_get_touch(void)
 {
     return s_touch;
+}
+
+void chrone_hal_touch_lvgl_enable(bool enable)
+{
+    if (s_lv_touch_indev) {
+        lv_indev_enable(s_lv_touch_indev, enable);
+    }
+}
+
+bool chrone_hal_touch_any_pressed(void)
+{
+    if (!s_touch) {
+        return false;
+    }
+
+    if (esp_lcd_touch_read_data(s_touch) != ESP_OK) {
+        return false;
+    }
+
+    esp_lcd_touch_point_data_t pt[1];
+    uint8_t cnt = 0;
+    if (esp_lcd_touch_get_data(s_touch, pt, &cnt, 1) != ESP_OK) {
+        return false;
+    }
+    return cnt > 0;
 }

@@ -61,32 +61,42 @@ void weather_code_get_desc(int code, bool is_day, char *desc_buf, size_t buf_siz
             level = 3;
             snprintf(desc_buf, buf_size, "Snowy-%d", level);
             return;
+        /* 26–37：与心知官方 code 表一致（见 docs.seniverse.com/api/start/code.html） */
         case 26:
+            snprintf(desc_buf, buf_size, "Dust");
+            return;
         case 27:
+            snprintf(desc_buf, buf_size, "Sand");
+            return;
         case 28:
-            level = 1;
-            snprintf(desc_buf, buf_size, "Foggy-%d", level);
+            snprintf(desc_buf, buf_size, "Duststorm");
             return;
         case 29:
+            snprintf(desc_buf, buf_size, "Sandstorm");
+            return;
         case 30:
-            level = 2;
-            snprintf(desc_buf, buf_size, "Foggy-%d", level);
+            snprintf(desc_buf, buf_size, "Foggy");
             return;
         case 31:
+            snprintf(desc_buf, buf_size, "Haze");
+            return;
         case 32:
+            snprintf(desc_buf, buf_size, "Windy");
+            return;
         case 33:
-            level = 1;
-            snprintf(desc_buf, buf_size, "Severe-%d", level);
+            snprintf(desc_buf, buf_size, "Blustery");
             return;
         case 34:
+            snprintf(desc_buf, buf_size, "Hurricane");
+            return;
         case 35:
-            level = 2;
-            snprintf(desc_buf, buf_size, "Severe-%d", level);
+            snprintf(desc_buf, buf_size, "Trop Storm");
             return;
         case 36:
+            snprintf(desc_buf, buf_size, "Tornado");
+            return;
         case 37:
-            level = 3;
-            snprintf(desc_buf, buf_size, "Severe-%d", level);
+            snprintf(desc_buf, buf_size, "Cold");
             return;
         default:
             snprintf(desc_buf, buf_size, "Unknown");

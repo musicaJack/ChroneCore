@@ -1,5 +1,6 @@
 #include "alarm_time_picker.hpp"
 
+#include "chrone_ui_layout.h"
 #include "chrone_font_dseg56.h"
 #include "chrone_haptic.h"
 #include "chrone_time.h"
@@ -175,13 +176,12 @@ lv_obj_t *AlarmTimePicker::create(lv_obj_t *parent)
     }
 
     const int root_h = CHRONE_ALARM_PICKER_H + kDragBelowPx;
-    s_root = lv_obj_create(parent);
+    s_root = chrone_ui_cont_create(parent);
     lv_obj_set_size(s_root, CHRONE_LCD_W - 16, root_h);
     lv_obj_align(s_root, LV_ALIGN_TOP_MID, 0, CHRONE_ALARM_PICKER_Y);
     lv_obj_set_style_bg_opa(s_root, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(s_root, 0, 0);
     lv_obj_set_style_pad_all(s_root, 0, 0);
-    lv_obj_remove_flag(s_root, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_remove_flag(s_root, LV_OBJ_FLAG_CLICKABLE);
 
     lv_obj_set_flex_flow(s_root, LV_FLEX_FLOW_ROW);
@@ -191,11 +191,10 @@ lv_obj_t *AlarmTimePicker::create(lv_obj_t *parent)
     auto setup_column = [this](Column &col, int max_v, int id) {
         col.max_value = max_v;
         col.col_id = id;
-        col.zone = lv_obj_create(s_root);
+        col.zone = chrone_ui_cont_create(s_root);
         lv_obj_set_size(col.zone, kColW, root_h);
         lv_obj_set_style_bg_opa(col.zone, LV_OPA_TRANSP, 0);
         lv_obj_set_style_border_width(col.zone, 0, 0);
-        lv_obj_remove_flag(col.zone, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_add_flag(col.zone, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_set_user_data(col.zone, this);
 

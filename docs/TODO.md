@@ -61,7 +61,7 @@
 （方案见 [alarm-implementation.md](alarm-implementation.md)）
 
 - [x] `chrone_alarm`：`alarm_cfg` NVS + 仅 enabled 时调度
-- [x] 进入配置：主钟区长按 3s（原左+右 chord 已改）
+- [x] 进入配置：主钟区长按 3s → **Settings Hub**（闹钟经 Hub → Alarms）
 - [x] 闹钟 UI：DSEG 滚轮编辑 + 列表/返回；顶栏闹钟图标
 - [x] `chrone_audio` I2S 蜂鸣（880Hz 断续音，BSP `esp_codec_dev`）
 - [x] 停止：响铃层触摸 + 表盘点击 + 60s 超时
@@ -85,7 +85,9 @@
 - [ ] SK6812 状态指示（可选）
 - [ ] MPU6886 亮屏唤醒等（摇一摇关闹钟已在阶段 4 实现则此项为增强）
 - [ ] TF 卡 + SPI 互斥（可选）
-- [ ] 设置页：亮度、强制配网、关于
+- [x] **显示空闲 V1**：`blank_timeout_s` 默认 120s、无触摸背光 0、触摸恢复 NVS 亮度（见 [settings-and-display-idle.md](settings-and-display-idle.md)）
+- [x] **Settings Hub MVP**：Hub + Display + Sound & vibration + Alarms 入口（见 [setup-hub-design.md](setup-hub-design.md)）
+- [ ] 设置页扩展：Network / About、强制配网（P2）
 - [ ] 全量测试表（见 development-plan.md §10）
 - [ ] 根 README 快速开始（烧录说明）
 

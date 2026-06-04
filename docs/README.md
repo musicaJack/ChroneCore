@@ -10,7 +10,9 @@
 | [alarm-implementation.md](alarm-implementation.md) | 阶段 4 闹钟：NVS、左+右进配置、触摸/摇一摇停止 |
 | [clock-ui-reference.md](clock-ui-reference.md) | **数字/模拟时钟 UI**：NanoTimer、DS3231_Clock 样式与移植规格 |
 | [architecture.md](architecture.md) | 系统架构、模块划分、数据流、状态机、存储 |
-| [power-management.md](power-management.md) | **节能设计**：触摸亮屏、AXP192 断电、浅睡与 WiFi 省电、天气 4h |
+| [power-management.md](power-management.md) | **节能设计（长期）**：AXP192 断电、浅睡、WiFi 省电、天气 4h |
+| [setup-hub-design.md](setup-hub-design.md) | **Settings 菜单（已拍板）**：长按 3s + 短振、Alarms/Display/Sound & vibration、顶栏 Back |
+| [settings-and-display-idle.md](settings-and-display-idle.md) | **关屏节能**：2 min 关背光、触摸亮屏、NVS；菜单详见 setup-hub-design |
 | [development-plan.md](development-plan.md) | 分阶段开发计划、里程碑、风险与验收 |
 | [TODO.md](TODO.md) | **当前开发待办清单**（随进度更新） |
 

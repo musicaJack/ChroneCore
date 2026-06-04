@@ -1,8 +1,10 @@
 #include "chrone_ui.h"
+#include "chrone_ui_layout.h"
 
 #include "analog_clock.hpp"
 #include "chrone_alarm.h"
 #include "chrone_alarm_icon.h"
+#include "chrone_haptic.h"
 #include "chrone_alarm_icon_bitmap.h"
 #include "chrone_input.h"
 #include "chrone_font_dseg56.h"
@@ -401,6 +403,7 @@ static void show_provisioning_ui(void)
     release_clock_handles();
     clear_screen_children(s_screen);
     s_prov_ui = true;
+    chrone_ui_prepare_screen(s_screen);
     lv_obj_set_style_bg_color(s_screen, ui_color_bg(), 0);
     create_provisioning_screen(s_screen);
     ESP_LOGI(TAG, "provisioning UI");
@@ -454,7 +457,7 @@ static void tick_timer_cb(lv_timer_t *timer)
         s_analog.on_second_tick(&tm_local);
     }
 
-    if (!chrone_ui_alarm_config_active()) {
+    if (!chrone_ui_in_settings_tree()) {
         chrone_ui_update_ringing();
     }
 }
@@ -511,14 +514,13 @@ static esp_err_t create_header_labels(lv_obj_t *screen)
 
 static esp_err_t create_footer_bar(lv_obj_t *screen)
 {
-    s_footer_row = lv_obj_create(screen);
+    s_footer_row = chrone_ui_cont_create(screen);
     lv_obj_set_size(s_footer_row, CHRONE_LCD_W - 16, CHRONE_FOOTER_H);
     lv_obj_align(s_footer_row, LV_ALIGN_BOTTOM_MID, 0, -4);
     lv_obj_set_style_bg_opa(s_footer_row, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(s_footer_row, 0, 0);
     lv_obj_set_style_pad_all(s_footer_row, 0, 0);
     lv_obj_set_style_pad_column(s_footer_row, 6, 0);
-    lv_obj_remove_flag(s_footer_row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_remove_flag(s_footer_row, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_flex_flow(s_footer_row, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(s_footer_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -545,12 +547,11 @@ static esp_err_t create_footer_bar(lv_obj_t *screen)
     style_footer_label(s_label_temp);
     lv_label_set_text(s_label_temp, "--");
 
-    lv_obj_t *spacer = lv_obj_create(s_footer_row);
+    lv_obj_t *spacer = chrone_ui_cont_create(s_footer_row);
     lv_obj_set_size(spacer, 1, 1);
     lv_obj_set_flex_grow(spacer, 1);
     lv_obj_set_style_bg_opa(spacer, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(spacer, 0, 0);
-    lv_obj_remove_flag(spacer, LV_OBJ_FLAG_SCROLLABLE);
 
     s_label_city = lv_label_create(s_footer_row);
     style_footer_label(s_label_city);
@@ -571,13 +572,12 @@ static lv_obj_t *create_seg_part(lv_obj_t *parent, const char *text)
 
 static esp_err_t create_time_row(lv_obj_t *screen)
 {
-    s_time_row = lv_obj_create(screen);
+    s_time_row = chrone_ui_cont_create(screen);
     lv_obj_set_size(s_time_row, CHRONE_LCD_W, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_opa(s_time_row, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(s_time_row, 0, 0);
     lv_obj_set_style_pad_all(s_time_row, 0, 0);
     lv_obj_set_style_pad_column(s_time_row, 4, 0);
-    lv_obj_remove_flag(s_time_row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_remove_flag(s_time_row, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_flag(s_time_row, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
 
@@ -770,7 +770,7 @@ extern "C" void chrone_ui_update_ringing(void)
 static void alarm_long_press_timer_cb(lv_timer_t *timer)
 {
     (void)timer;
-    if (chrone_ui_alarm_config_active()) {
+    if (chrone_ui_in_settings_tree()) {
         return;
     }
     if (chrone_alarm_get_state() == CHRONE_ALARM_STATE_RINGING) {
@@ -780,8 +780,9 @@ static void alarm_long_press_timer_cb(lv_timer_t *timer)
     s_suppress_tap_click = true;
     lv_obj_t *screen = s_screen ? s_screen : lv_scr_act();
     if (screen) {
-        chrone_ui_show_alarm_config(screen);
-        ESP_LOGI(TAG, "long press %d ms -> alarm config", CLOCK_LONG_PRESS_MS);
+        chrone_haptic_confirm();
+        chrone_ui_show_settings_hub(screen);
+        ESP_LOGI(TAG, "long press %d ms -> settings hub", CLOCK_LONG_PRESS_MS);
     }
 }
 
@@ -790,7 +791,7 @@ static void tap_layer_event_cb(lv_event_t *e)
     const lv_event_code_t code = lv_event_get_code(e);
 
     if (code == LV_EVENT_PRESSED) {
-        if (chrone_ui_alarm_config_active()) {
+        if (chrone_ui_in_settings_tree()) {
             return;
         }
         if (chrone_alarm_get_state() == CHRONE_ALARM_STATE_RINGING) {
@@ -846,13 +847,11 @@ static void tap_layer_event_cb(lv_event_t *e)
 
 static void create_tap_layer(lv_obj_t *screen)
 {
-    s_tap_layer = lv_obj_create(screen);
-    /* 不覆盖底部 60px，留给 Core2 三区虚拟键（与 AWS Button_Attach 同高） */
+    s_tap_layer = chrone_ui_cont_create(screen);
     lv_obj_set_size(s_tap_layer, CHRONE_LCD_W, CHRONE_LCD_H - CHRONE_VIRTUAL_BTN_H);
     lv_obj_align(s_tap_layer, LV_ALIGN_TOP_MID, 0, 0);
     lv_obj_set_style_bg_opa(s_tap_layer, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(s_tap_layer, 0, 0);
-    lv_obj_remove_flag(s_tap_layer, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(s_tap_layer, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(s_tap_layer, tap_layer_event_cb, LV_EVENT_PRESSED, nullptr);
     lv_obj_add_event_cb(s_tap_layer, tap_layer_event_cb, LV_EVENT_RELEASED, nullptr);
@@ -918,6 +917,7 @@ static esp_err_t rebuild_clock_screen(lv_obj_t *screen)
 
     lv_obj_set_style_bg_color(screen, ui_color_bg(), 0);
     lv_obj_add_flag(screen, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+    chrone_ui_prepare_screen(screen);
 
     esp_err_t ret;
     if (s_mode == CHRONE_UI_MODE_ANALOG) {

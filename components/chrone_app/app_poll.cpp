@@ -1,6 +1,7 @@
 #include "chrone_app.hpp"
 
 #include "chrone_alarm.h"
+#include "chrone_display_idle.h"
 #include "chrone_display.hpp"
 #include "chrone_hal.h"
 #include "chrone_imu.h"
@@ -15,6 +16,13 @@ static const char *TAG = "chrone_app";
 static lv_timer_t *s_input_timer;
 static uint32_t s_alarm_tick_bucket = UINT32_MAX;
 static bool s_ring_ptr_was_down;
+static bool s_idle_ptr_was_down;
+
+/** Settings 树内：长按返回上一级（与主钟进 Settings 同为 3s） */
+#define SETTINGS_LONG_PRESS_MS 3000
+static bool s_settings_ptr_was_down;
+static uint32_t s_settings_press_start_ms;
+static bool s_settings_long_done;
 
 static bool lvgl_pointer_down(void)
 {
@@ -66,6 +74,47 @@ static void input_timer_cb(lv_timer_t *timer)
         chrone::DisplayLock lock;
         if (lock.ok()) {
             chrone_input_poll();
+
+            bool down = false;
+            if (chrone_display_idle_is_off()) {
+                down = chrone_hal_touch_any_pressed();
+            } else {
+                down = lvgl_pointer_down();
+            }
+            if (down && !s_idle_ptr_was_down) {
+                chrone_display_idle_on_touch();
+            }
+            s_idle_ptr_was_down = down;
+
+            const bool clock_only = !chrone_ui_in_settings_tree()
+                                    && chrone_alarm_get_state() != CHRONE_ALARM_STATE_RINGING;
+            chrone_display_idle_tick(clock_only);
+
+            if (chrone_ui_in_settings_tree()) {
+                bool ptr_down = false;
+                if (chrone_display_idle_is_off()) {
+                    ptr_down = chrone_hal_touch_any_pressed();
+                } else {
+                    ptr_down = lvgl_pointer_down();
+                }
+
+                const uint32_t now_ms = (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
+                if (!ptr_down) {
+                    s_settings_ptr_was_down = false;
+                    s_settings_long_done = false;
+                } else if (!s_settings_ptr_was_down) {
+                    s_settings_ptr_was_down = true;
+                    s_settings_press_start_ms = now_ms;
+                    s_settings_long_done = false;
+                } else if (!s_settings_long_done
+                           && (now_ms - s_settings_press_start_ms) >= SETTINGS_LONG_PRESS_MS) {
+                    s_settings_long_done = true;
+                    chrone_ui_nav_back();
+                }
+            } else {
+                s_settings_ptr_was_down = false;
+                s_settings_long_done = false;
+            }
         }
     }
 
@@ -90,20 +139,6 @@ static void input_timer_cb(lv_timer_t *timer)
     }
 
     s_ring_ptr_was_down = false;
-
-    if (chrone_ui_alarm_config_active()) {
-        static bool s_mid_prev;
-        const bool mid = chrone_input_middle_down();
-        const bool edge = mid && !s_mid_prev;
-        s_mid_prev = mid;
-        if (edge) {
-            chrone::DisplayLock lock;
-            if (lock.ok()) {
-                chrone_ui_show_clock();
-                ESP_LOGI(TAG, "exit alarm config (middle)");
-            }
-        }
-    }
 }
 
 extern "C" esp_err_t chrone_app_poll_init(void)

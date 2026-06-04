@@ -1,7 +1,9 @@
 #include "chrone_ui.h"
+#include "chrone_ui_layout.h"
 
 #include "alarm_time_picker.hpp"
 #include "chrone_alarm.h"
+#include "chrone_display_idle.h"
 #include "chrone_haptic.h"
 #include "chrone_input.h"
 #include "clock_layout.h"
@@ -24,6 +26,11 @@ static lv_obj_t *s_lbl_rings_at;
 static lv_obj_t *s_header_bar;
 static uint8_t s_edit_repeat;
 static chrone::ui::AlarmTimePicker s_time_picker;
+
+static lv_obj_t *s_error_toast;
+static lv_timer_t *s_error_toast_timer;
+
+#define ALARM_ERROR_TOAST_MS 5000
 
 static const char *repeat_str(uint8_t r)
 {
@@ -65,13 +72,66 @@ static void refresh_rings_at_label(void)
     lv_label_set_text_fmt(s_lbl_rings_at, "Rings at %02u:%02u (24h)", h, m);
 }
 
-static void show_once_time_error(void)
+static void dismiss_error_toast(lv_timer_t *timer)
 {
-    if (!s_lbl_rings_at) {
+    if (s_error_toast) {
+        lv_obj_delete(s_error_toast);
+        s_error_toast = nullptr;
+    }
+    if (timer) {
+        lv_timer_delete(timer);
+    }
+    s_error_toast_timer = nullptr;
+}
+
+static void show_error_toast(const char *message)
+{
+    if (!s_screen || !message) {
         return;
     }
-    lv_obj_set_style_text_color(s_lbl_rings_at, lv_color_hex(0xFF5028), 0);
-    lv_label_set_text(s_lbl_rings_at, "Time too soon (need +2 min)");
+
+    if (s_error_toast_timer) {
+        lv_timer_delete(s_error_toast_timer);
+        s_error_toast_timer = nullptr;
+    }
+    if (s_error_toast) {
+        lv_obj_delete(s_error_toast);
+        s_error_toast = nullptr;
+    }
+
+    s_error_toast = chrone_ui_cont_create(s_screen);
+    lv_obj_set_size(s_error_toast, 272, 76);
+    lv_obj_align(s_error_toast, LV_ALIGN_CENTER, 0, -8);
+    lv_obj_set_style_bg_color(s_error_toast, lv_color_hex(0x1E1018), 0);
+    lv_obj_set_style_border_color(s_error_toast, lv_color_hex(0xFF5028), 0);
+    lv_obj_set_style_border_width(s_error_toast, 2, 0);
+    lv_obj_set_style_radius(s_error_toast, 8, 0);
+    lv_obj_set_style_pad_all(s_error_toast, 10, 0);
+
+    lv_obj_t *lbl = lv_label_create(s_error_toast);
+    lv_label_set_text(lbl, message);
+    lv_label_set_long_mode(lbl, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(lbl, 248);
+    lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_color(lbl, lv_color_hex(0xFFE8E0), 0);
+    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, 0);
+    lv_obj_center(lbl);
+
+    lv_obj_move_foreground(s_error_toast);
+
+    s_error_toast_timer = lv_timer_create(dismiss_error_toast, ALARM_ERROR_TOAST_MS, nullptr);
+    if (s_error_toast_timer) {
+        lv_timer_set_repeat_count(s_error_toast_timer, 1);
+    }
+}
+
+static void show_once_time_error(void)
+{
+    if (s_lbl_rings_at) {
+        lv_obj_set_style_text_color(s_lbl_rings_at, lv_color_hex(0xFF5028), 0);
+        lv_label_set_text(s_lbl_rings_at, "Time too soon (need +2 min)");
+    }
+    show_error_toast("Once alarm must be\nat least 2 min ahead");
 }
 
 static void show_list_panel(void);
@@ -113,18 +173,6 @@ static void save_edit_and_back(void)
     show_list_panel();
 }
 
-static void list_back_event(lv_event_t *e)
-{
-    (void)e;
-    chrone_ui_show_clock();
-}
-
-static void edit_back_event(lv_event_t *e)
-{
-    (void)e;
-    save_edit_and_back();
-}
-
 struct PendingEdit {
     int index;
 };
@@ -143,6 +191,7 @@ static void deferred_edit_cb(lv_timer_t *timer)
 
 static void row_click_event(lv_event_t *e)
 {
+    chrone_haptic_confirm();
     const int idx = (int)(intptr_t)lv_event_get_user_data(e);
     auto *pending = static_cast<PendingEdit *>(lv_malloc(sizeof(PendingEdit)));
     if (!pending) {
@@ -176,6 +225,7 @@ static void repeat_cycle_event(lv_event_t *e)
 static lv_obj_t *make_btn(lv_obj_t *parent, const char *txt, lv_event_cb_t cb, void *ud)
 {
     lv_obj_t *b = lv_button_create(parent);
+    chrone_ui_no_scroll(b);
     lv_obj_t *l = lv_label_create(b);
     lv_label_set_text(l, txt);
     lv_obj_center(l);
@@ -185,28 +235,15 @@ static lv_obj_t *make_btn(lv_obj_t *parent, const char *txt, lv_event_cb_t cb, v
     return b;
 }
 
-/** 顶栏返回键：大热区，最后创建并置顶，避免被滚轮层挡住 */
-static void create_alarm_header(lv_obj_t *screen, const char *title_text, const char *back_text,
-                                lv_event_cb_t back_cb)
+static void create_alarm_header(lv_obj_t *screen, const char *title_text)
 {
-    s_header_bar = lv_obj_create(screen);
+    s_header_bar = chrone_ui_cont_create(screen);
     lv_obj_set_size(s_header_bar, CHRONE_LCD_W, CHRONE_ALARM_HEADER_H);
     lv_obj_align(s_header_bar, LV_ALIGN_TOP_LEFT, 0, 0);
     lv_obj_set_style_bg_opa(s_header_bar, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(s_header_bar, 0, 0);
     lv_obj_set_style_pad_all(s_header_bar, 0, 0);
-    lv_obj_remove_flag(s_header_bar, LV_OBJ_FLAG_SCROLLABLE);
-    /* 顶栏容器不可点击，避免上划经过 y<42 时抢走滚轮按压 */
     lv_obj_remove_flag(s_header_bar, LV_OBJ_FLAG_CLICKABLE);
-
-    lv_obj_t *back = lv_button_create(s_header_bar);
-    lv_obj_set_size(back, CHRONE_ALARM_NAV_BTN_W, CHRONE_ALARM_NAV_BTN_H);
-    lv_obj_align(back, LV_ALIGN_LEFT_MID, 2, 0);
-    lv_obj_t *bl = lv_label_create(back);
-    lv_label_set_text(bl, back_text);
-    lv_obj_set_style_text_font(bl, &lv_font_montserrat_14, 0);
-    lv_obj_center(bl);
-    lv_obj_add_event_cb(back, back_cb, LV_EVENT_CLICKED, nullptr);
 
     lv_obj_t *title = lv_label_create(s_header_bar);
     lv_label_set_text(title, title_text);
@@ -236,6 +273,7 @@ static void rebuild_list_rows(void)
                       a.enabled ? "[ON]" : "[--]", a.hour, a.minute, repeat_str(a.repeat));
 
         lv_obj_t *row = lv_button_create(s_list_panel);
+        chrone_ui_no_scroll(row);
         lv_obj_set_width(row, CHRONE_LCD_W - 24);
         lv_obj_set_height(row, 36);
         lv_obj_t *lbl = lv_label_create(row);
@@ -266,7 +304,7 @@ static void clear_screen_children(void)
 
 static void build_list_ui(void)
 {
-    s_list_panel = lv_obj_create(s_screen);
+    s_list_panel = chrone_ui_cont_create(s_screen);
     lv_obj_set_size(s_list_panel, CHRONE_LCD_W - 16, CHRONE_LCD_H - CHRONE_ALARM_HEADER_H - 8);
     lv_obj_align(s_list_panel, LV_ALIGN_TOP_MID, 0, CHRONE_ALARM_HEADER_H + 4);
     lv_obj_set_flex_flow(s_list_panel, LV_FLEX_FLOW_COLUMN);
@@ -274,10 +312,9 @@ static void build_list_ui(void)
     lv_obj_set_style_pad_row(s_list_panel, 6, 0);
     lv_obj_set_style_bg_opa(s_list_panel, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(s_list_panel, 0, 0);
-    lv_obj_remove_flag(s_list_panel, LV_OBJ_FLAG_SCROLLABLE);
 
     rebuild_list_rows();
-    create_alarm_header(s_screen, "Alarms", "< Back", list_back_event);
+    create_alarm_header(s_screen, "Alarms");
 }
 
 static void build_edit_ui(int index)
@@ -303,7 +340,7 @@ static void build_edit_ui(int index)
     lv_obj_align(s_lbl_rings_at, LV_ALIGN_TOP_MID, 0, CHRONE_ALARM_META_Y);
     refresh_rings_at_label();
 
-    s_edit_panel = lv_obj_create(s_screen);
+    s_edit_panel = chrone_ui_cont_create(s_screen);
     lv_obj_set_size(s_edit_panel, CHRONE_LCD_W - 16, CHRONE_LCD_H - CHRONE_ALARM_META_Y - 36);
     lv_obj_align(s_edit_panel, LV_ALIGN_TOP_MID, 0, CHRONE_ALARM_META_Y + 18);
     lv_obj_set_style_bg_opa(s_edit_panel, LV_OPA_TRANSP, 0);
@@ -311,28 +348,26 @@ static void build_edit_ui(int index)
     lv_obj_set_flex_flow(s_edit_panel, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(s_edit_panel, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_row(s_edit_panel, 10, 0);
-    lv_obj_remove_flag(s_edit_panel, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t *row_en = lv_obj_create(s_edit_panel);
+    lv_obj_t *row_en = chrone_ui_cont_create(s_edit_panel);
     lv_obj_set_size(row_en, LV_PCT(100), 36);
     lv_obj_set_style_bg_opa(row_en, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(row_en, 0, 0);
-    lv_obj_remove_flag(row_en, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_t *len = lv_label_create(row_en);
     lv_label_set_text(len, "Enabled");
     lv_obj_set_style_text_font(len, &lv_font_montserrat_14, 0);
     s_sw_enabled = lv_switch_create(row_en);
+    chrone_ui_no_scroll(s_sw_enabled);
     lv_obj_align(len, LV_ALIGN_LEFT_MID, 4, 0);
     lv_obj_align(s_sw_enabled, LV_ALIGN_RIGHT_MID, -4, 0);
     if (a.enabled || alarm_slot_is_unset(&a)) {
         lv_obj_add_state(s_sw_enabled, LV_STATE_CHECKED);
     }
 
-    lv_obj_t *row_repeat = lv_obj_create(s_edit_panel);
+    lv_obj_t *row_repeat = chrone_ui_cont_create(s_edit_panel);
     lv_obj_set_size(row_repeat, LV_PCT(100), 36);
     lv_obj_set_style_bg_opa(row_repeat, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(row_repeat, 0, 0);
-    lv_obj_remove_flag(row_repeat, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(row_repeat, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(row_repeat, repeat_cycle_event, LV_EVENT_CLICKED, nullptr);
 
@@ -345,13 +380,16 @@ static void build_edit_ui(int index)
     lv_obj_add_event_cb(s_lbl_repeat, repeat_cycle_event, LV_EVENT_CLICKED, nullptr);
     refresh_repeat_label();
 
-    create_alarm_header(s_screen, title_buf, "< List", edit_back_event);
+    create_alarm_header(s_screen, title_buf);
 }
 
 static void show_list_panel(void)
 {
     s_edit_index = -1;
     clear_screen_children();
+    if (s_screen) {
+        chrone_ui_prepare_screen(s_screen);
+    }
     build_list_ui();
 }
 
@@ -361,6 +399,9 @@ static void show_edit_panel(int index)
         return;
     }
     clear_screen_children();
+    if (s_screen) {
+        chrone_ui_prepare_screen(s_screen);
+    }
     build_edit_ui(index);
 }
 
@@ -375,22 +416,54 @@ extern "C" void chrone_ui_show_alarm_config(lv_obj_t *screen)
         return;
     }
     chrone_ui_pause_clock();
-    chrone_input_unbind_screen();
     s_screen = screen;
     s_alarm_ui_active = true;
     lv_obj_set_style_bg_color(screen, lv_color_hex(0x06080C), 0);
     clear_screen_children();
+    chrone_ui_prepare_screen(screen);
     chrone_haptic_prepare();
     build_list_ui();
     ESP_LOGI(TAG, "alarm config UI (DSEG picker)");
 }
 
-extern "C" void chrone_ui_show_clock(void)
+extern "C" void chrone_ui_alarm_config_leave(void)
 {
     s_alarm_ui_active = false;
     s_edit_index = -1;
-    clear_screen_children();
+}
+
+extern "C" void chrone_ui_alarm_nav_back(void)
+{
+    chrone_display_idle_on_touch();
+    if (s_edit_index >= 0) {
+        save_edit_and_back();
+        return;
+    }
+    chrone_haptic_confirm();
     if (s_screen) {
-        chrone_ui_resume_clock(s_screen);
+        chrone_ui_show_settings_hub(s_screen);
+    }
+}
+
+extern "C" void chrone_ui_show_clock(void)
+{
+    chrone_ui_alarm_config_leave();
+
+    lv_obj_t *screen = s_screen;
+    if (!screen) {
+        screen = lv_scr_act();
+    }
+
+    chrone_ui_settings_leave();
+
+    if (!screen) {
+        ESP_LOGW(TAG, "show_clock: no active screen");
+        return;
+    }
+
+    s_screen = screen;
+    clear_screen_children();
+    if (chrone_ui_resume_clock(screen) != ESP_OK) {
+        ESP_LOGW(TAG, "show_clock: resume_clock failed");
     }
 }

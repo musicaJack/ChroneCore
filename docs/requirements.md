@@ -104,7 +104,25 @@ Core2 无独立机械按键，采用 **触摸屏自定义区域 + 可选底部�
 | FR-INPUT-02 | 触摸防抖 50～100ms，避免误触 | P1 |
 | FR-INPUT-03 | UI 绘制遵循 `bsp_display_lock` / LVGL 线程安全（2048 惯例） | P0 |
 
-### 2.7 外设集成（FR-HW）
+### 2.7 设备设置与关屏节能（FR-SET / FR-DISP）
+
+> **菜单与入口：** [setup-hub-design.md](setup-hub-design.md) · **关屏节能：** [settings-and-display-idle.md](settings-and-display-idle.md)
+
+在完整 [power-management.md](power-management.md) 未落地前，V1 **仅做关背光节能**，不做浅睡与 AXP 外设关断。
+
+| ID | 需求 | 优先级 | 验收要点 |
+|----|------|--------|----------|
+| FR-DISP-01 | 无触摸超过 **`blank_timeout_s`**（默认 **120 s**）后背光为 0 | P0 | ESP/LVGL/WiFi 仍运行；触摸可唤醒 |
+| FR-DISP-02 | 触摸唤醒后背光恢复为 NVS **`brightness`** | P0 | 与设置页一致 |
+| FR-DISP-03 | 闹钟响铃前 **先亮屏** 再发声/震动 | P0 | 关屏中到点闹钟可见 |
+| FR-SET-01 | 设置页可配置 **亮度**、**关屏时间（分钟）**，写入 NVS `chrone` | P0 | 重启保持；亮度即时生效 |
+| FR-SET-00 | **长按表盘 3s** 进 **Settings** Hub；**配置树内有效操作均有震动**；顶栏 Back 逐级返回；响铃中禁止 | P0 | [setup-hub-design.md](setup-hub-design.md) §4 |
+| FR-SET-02 | Settings 内 **Sound & vibration**（音量、震动）；表盘仅短按切换，无菜单项 | P0 | [setup-hub-design.md](setup-hub-design.md) |
+| FR-SET-03 | 配网 / About（Network） | P2 | 同上 |
+
+**非目标（V1）：** 深度空闲、ESP 浅睡、AXP 关 LDO2/LDO3。
+
+### 2.8 外设集成（FR-HW）
 
 以下能力须在 ChroneCore 中 **可用且文档化**（实现阶段可分优先级落地）：
 
@@ -149,7 +167,7 @@ Core2 无独立机械按键，采用 **触摸屏自定义区域 + 可选底部�
 侧滑/菜单
   ├─ 闹钟列表
   ├─ 秒表
-  ├─ 设置（时钟样式、亮度、WiFi、关于）
+  ├─ 设置（亮度、关屏时间、闹钟音量、震动、表盘、WiFi、关于）— 见 [settings-and-display-idle.md](settings-and-display-idle.md)
   └─ 配网入口（force AP）
 ```
 

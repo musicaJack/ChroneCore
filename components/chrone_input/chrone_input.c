@@ -76,6 +76,8 @@ static lv_obj_t *create_bottom_zone(lv_obj_t *parent, lv_align_t align, int x_of
     lv_obj_set_style_bg_opa(z, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(z, 0, 0);
     lv_obj_remove_flag(z, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scrollbar_mode(z, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_remove_flag(z, LV_OBJ_FLAG_SCROLL_CHAIN);
     lv_obj_add_flag(z, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(z, zone_event_cb, LV_EVENT_PRESSED, (void *)id);
     lv_obj_add_event_cb(z, zone_event_cb, LV_EVENT_RELEASED, (void *)id);

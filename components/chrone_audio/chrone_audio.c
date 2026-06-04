@@ -1,5 +1,6 @@
 #include "chrone_audio.h"
 
+#include "chrone_settings.h"
 #include "bsp/m5stack_core_2.h"
 #include "esp_codec_dev.h"
 #include "esp_log.h"
@@ -14,7 +15,6 @@ static const char *TAG = "chrone_audio";
 
 #define SAMPLE_RATE_HZ     44100
 #define CHUNK_SAMPLES      512
-#define ALARM_VOLUME       68.0f
 
 /* 由 CMake EMBED_FILES 链接进 Flash .rodata，不占 PSRAM */
 extern const uint8_t alarm_6s_pcm_start[] asm("_binary_alarm_6s_pcm_start");
@@ -23,7 +23,15 @@ extern const uint8_t alarm_6s_pcm_end[] asm("_binary_alarm_6s_pcm_end");
 static esp_codec_dev_handle_t s_spk;
 static TaskHandle_t s_play_task;
 static volatile bool s_playing;
+static bool s_codec_open;
 static bool s_audio_ready;
+
+static void wait_play_task_done(void)
+{
+    for (int i = 0; i < 150 && s_play_task != NULL; ++i) {
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
 
 static size_t alarm_pcm_num_samples(void)
 {
@@ -53,6 +61,7 @@ static void alarm_play_task(void *arg)
     if (!s_spk) {
         ESP_LOGE(TAG, "speaker codec not ready");
         s_playing = false;
+        s_play_task = NULL;
         vTaskDelete(NULL);
         return;
     }
@@ -61,6 +70,7 @@ static void alarm_play_task(void *arg)
     if (num_samples == 0) {
         ESP_LOGE(TAG, "embedded alarm PCM is empty");
         s_playing = false;
+        s_play_task = NULL;
         vTaskDelete(NULL);
         return;
     }
@@ -75,11 +85,13 @@ static void alarm_play_task(void *arg)
     if (esp_codec_dev_open(s_spk, &fs) != ESP_CODEC_DEV_OK) {
         ESP_LOGE(TAG, "codec open failed");
         s_playing = false;
+        s_play_task = NULL;
         vTaskDelete(NULL);
         return;
     }
+    s_codec_open = true;
 
-    (void)esp_codec_dev_set_out_vol(s_spk, ALARM_VOLUME);
+    (void)esp_codec_dev_set_out_vol(s_spk, (float)chrone_settings_get_alarm_vol());
 
     int16_t buf[CHUNK_SAMPLES];
     size_t sample_pos = 0;
@@ -97,9 +109,12 @@ static void alarm_play_task(void *arg)
         }
     }
 
-    (void)esp_codec_dev_close(s_spk);
+    if (s_codec_open) {
+        (void)esp_codec_dev_close(s_spk);
+        s_codec_open = false;
+    }
     s_play_task = NULL;
-    ESP_LOGI(TAG, "alarm tone stopped");
+    ESP_LOGD(TAG, "alarm tone stopped");
     vTaskDelete(NULL);
 }
 
@@ -107,6 +122,7 @@ esp_err_t chrone_audio_init(void)
 {
     s_playing = false;
     s_play_task = NULL;
+    s_codec_open = false;
     s_audio_ready = false;
     s_spk = NULL;
 
@@ -136,7 +152,12 @@ void chrone_audio_alarm_start(void)
         ESP_LOGW(TAG, "alarm start ignored (audio not ready)");
         return;
     }
-    if (s_playing) {
+
+    if (s_play_task != NULL) {
+        chrone_audio_alarm_stop();
+    }
+    if (s_play_task != NULL) {
+        ESP_LOGW(TAG, "alarm start ignored (still stopping)");
         return;
     }
 
@@ -150,12 +171,9 @@ void chrone_audio_alarm_start(void)
 
 void chrone_audio_alarm_stop(void)
 {
-    if (!s_playing) {
+    if (!s_playing && s_play_task == NULL) {
         return;
     }
     s_playing = false;
-
-    for (int i = 0; i < 50 && s_play_task != NULL; ++i) {
-        vTaskDelay(pdMS_TO_TICKS(10));
-    }
+    wait_play_task_done();
 }

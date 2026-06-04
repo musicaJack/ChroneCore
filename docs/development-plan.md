@@ -222,7 +222,8 @@ BM8563 可用，系统时间正确，为时钟/闹钟提供基础。
 | 6.1 | SK6812 统一 `chrone_led`（配网中=蓝，闹钟=红） | P1 | AWS SK6812 |
 | 6.2 | MPU6886 摇一摇关闹钟（若阶段 4 已做则仅调参/亮屏唤醒） | P2 | 阶段 4 `chrone_imu_shake_detected` |
 | 6.3 | TF 卡挂载 + SPI 互斥 | P3 | AWS `sdcard` |
-| 6.4 | 设置页：亮度、关于、恢复配网 | P1 | 2048 背光 API |
+| 6.4 | Settings Hub + 显示空闲（[setup-hub-design.md](setup-hub-design.md)） | P0 | 长按 3s+短振；Alarms/Display/Sound & vibration；顶栏 Back |
+| 6.5 | Network、About | P2 | 恢复配网 |
 | 6.5 | OTA 分区与升级（可选） | P2 | ESP-IDF OTA |
 | 6.6 | 全量测试用例表执行 | — | §10 |
 

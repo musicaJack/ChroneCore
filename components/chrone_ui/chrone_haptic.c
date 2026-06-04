@@ -86,3 +86,19 @@ void chrone_haptic_confirm(void)
     haptic_reset_state();
     (void)vibration_trigger();
 }
+
+void chrone_haptic_vibe_preview(uint8_t level)
+{
+    if (level == 0) {
+        return;
+    }
+    ensure_init();
+    if (!s_ready) {
+        return;
+    }
+    haptic_reset_state();
+    (void)vibration_trigger();
+    if (level >= 3) {
+        (void)vibration_trigger();
+    }
+}

@@ -118,19 +118,21 @@ const uint8_t* weather_icon_get_bitmap(int code, bool is_day)
         case 25:
             return is_day ? wi_snow_48x48 : wi_night_alt_snow_48x48;
         
-        // 26-28: 雾
+        // 26: 浮尘；27–29: 扬沙/沙尘暴/强沙尘暴
         case 26:
+            return wi_dust_48x48;
         case 27:
         case 28:
-            return is_day ? wi_day_fog_48x48 : wi_night_fog_48x48;
-        
-        // 29-30: 沙尘/扬沙/浮尘
         case 29:
-        case 30:
             return wi_sandstorm_48x48;
         
-        // 31-33: 大风等恶劣天气
+        // 30: 雾
+        case 30:
+            return is_day ? wi_day_fog_48x48 : wi_night_fog_48x48;
+        
+        // 31: 霾；32–33: 风/大风
         case 31:
+            return is_day ? wi_day_fog_48x48 : wi_fog_48x48;
         case 32:
         case 33:
             return is_day ? wi_day_windy_48x48 : wi_strong_wind_48x48;
